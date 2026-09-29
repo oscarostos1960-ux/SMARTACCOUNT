@@ -144,6 +144,7 @@ export default function MovimientosVista({
             <table className="w-full text-sm">
               <thead className="border-b border-border bg-surface-2 text-left text-xs uppercase tracking-wide text-muted">
                 <tr>
+                  <th scope="col" className="whitespace-nowrap px-4 py-3 text-right font-medium">Folio</th>
                   <th scope="col" className="whitespace-nowrap px-4 py-3 font-medium">Fecha</th>
                   <th scope="col" className="px-4 py-3 font-medium">Movimiento</th>
                   <th scope="col" className="px-4 py-3 text-right font-medium">Cargo</th>
@@ -159,8 +160,9 @@ export default function MovimientosVista({
                     onClick={() => abrir(m)}
                     tabIndex={0}
                     onKeyDown={(e) => { if (e.key === "Enter") abrir(m); }}
-                    aria-label={`${fmtFecha(m.fecha)}, ${m.descripcion || m.concepto || "movimiento"}, ${m.cargo > 0 ? "cargo " + dinero(m.cargo, moneda) : "abono " + dinero(m.abono, moneda)}`}
+                    aria-label={`Folio ${m.folio}, ${fmtFecha(m.fecha)}, ${m.descripcion || m.concepto || "movimiento"}, ${m.cargo > 0 ? "cargo " + dinero(m.cargo, moneda) : "abono " + dinero(m.abono, moneda)}`}
                   >
+                    <td className="num whitespace-nowrap px-4 py-3 text-right font-medium">{m.folio}</td>
                     <td className="num whitespace-nowrap px-4 py-3 text-muted">{fmtFecha(m.fecha)}</td>
                     <td className="max-w-md px-4 py-3">
                       <Detalle m={m} clasifPorId={clasifPorId} />
@@ -181,7 +183,7 @@ export default function MovimientosVista({
                 <button className="card w-full p-4 text-left" onClick={() => abrir(m)}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <p className="num text-xs text-muted">{fmtFecha(m.fecha)}</p>
+                      <p className="num text-xs text-muted"><span className="font-semibold text-text">#{m.folio}</span> · {fmtFecha(m.fecha)}</p>
                       <Detalle m={m} clasifPorId={clasifPorId} />
                     </div>
                     <div className="shrink-0 text-right">
@@ -236,7 +238,7 @@ function Detalle({ m, clasifPorId }: { m: Movimiento; clasifPorId: Map<number, C
     <div className="min-w-0">
       <p className="font-medium [overflow-wrap:anywhere]">{titulo}</p>
       {sub && <p className="text-xs text-muted [overflow-wrap:anywhere]">{sub}</p>}
-      {(m.leyenda1 || m.leyenda2) && <p className="text-xs text-muted/80 [overflow-wrap:anywhere]">{[m.leyenda1, m.leyenda2].filter(Boolean).join(" · ")}</p>}
+      {(m.leyenda1 || m.leyenda2 || m.leyenda3) && <p className="text-xs text-muted/80 [overflow-wrap:anywhere]">{[m.leyenda1, m.leyenda2, m.leyenda3].filter(Boolean).join(" · ")}</p>}
       <Insignias m={m} clasifPorId={clasifPorId} />
     </div>
   );
@@ -360,6 +362,9 @@ function DialogoMovimiento({
                   Ajuste creado al migrar del sistema anterior. {m.observaciones}
                 </p>
               )}
+              <Campo id="m-folio" etiqueta="Folio" error={e.folio} className="sm:col-span-2" ayuda={m ? undefined : "Se asigna el siguiente si lo dejas vacío"}>
+                <input id="m-folio" name="folio" type="text" inputMode="numeric" defaultValue={val("folio", m ? String(m.folio) : "")} placeholder="Automático" className="input num" aria-invalid={!!e.folio} />
+              </Campo>
               <Campo id="m-fecha" etiqueta="Fecha" requerido error={e.fecha} className="sm:col-span-2">
                 <input id="m-fecha" name="fecha" type="date" required defaultValue={val("fecha", m?.fecha ?? hoyCDMX())} className="input" aria-invalid={!!e.fecha} />
               </Campo>
@@ -380,9 +385,12 @@ function DialogoMovimiento({
               <Campo id="m-monto" etiqueta={`Importe (${cuenta.moneda})`} requerido error={e.monto} className="sm:col-span-2">
                 <input id="m-monto" name="monto" type="text" inputMode="decimal" required defaultValue={montoInicial} className="input num text-right" aria-invalid={!!e.monto} placeholder="0.00" />
               </Campo>
-              <Campo id="m-desc" etiqueta="Descripción" error={e.descripcion} className="sm:col-span-6">
+              <Campo id="m-desc" etiqueta="Transacción" error={e.descripcion} className="sm:col-span-4">
                 <input id="m-desc" name="descripcion" type="text" defaultValue={val("descripcion", m?.descripcion ?? "")} className="input" maxLength={250} aria-invalid={!!e.descripcion} />
               </Campo>
+              <Campo id="m-l1" etiqueta="Leyenda 1" className="sm:col-span-6"><input id="m-l1" name="leyenda1" type="text" defaultValue={val("leyenda1", m?.leyenda1 ?? "")} className="input" maxLength={255} /></Campo>
+              <Campo id="m-l2" etiqueta="Leyenda 2" className="sm:col-span-6"><input id="m-l2" name="leyenda2" type="text" defaultValue={val("leyenda2", m?.leyenda2 ?? "")} className="input" maxLength={255} /></Campo>
+              <Campo id="m-l3" etiqueta="Leyenda 3" className="sm:col-span-6"><input id="m-l3" name="leyenda3" type="text" defaultValue={val("leyenda3", m?.leyenda3 ?? "")} className="input" maxLength={500} /></Campo>
               <Campo id="m-concepto" etiqueta="Concepto" className="sm:col-span-3">
                 <Combobox id="m-concepto" nombre="concepto_id" opciones={conceptosVisibles} valorInicial={val("concepto_id", m?.concepto_id ? String(m.concepto_id) : "")} placeholder="Buscar concepto…" />
               </Campo>
@@ -417,14 +425,6 @@ function DialogoMovimiento({
               <Campo id="m-obs" etiqueta="Observaciones" className="sm:col-span-6">
                 <textarea id="m-obs" name="observaciones" rows={2} defaultValue={val("observaciones", m?.es_ajuste ? m.observaciones ?? "" : m?.observaciones ?? "")} className="input" />
               </Campo>
-              <details className="sm:col-span-6" open={!!(m?.leyenda1 || m?.leyenda2 || m?.leyenda3)}>
-                <summary className="cursor-pointer text-sm font-medium text-primary">Datos del banco (leyendas)</summary>
-                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Campo id="m-l1" etiqueta="Leyenda 1"><input id="m-l1" name="leyenda1" type="text" defaultValue={val("leyenda1", m?.leyenda1 ?? "")} className="input" maxLength={255} /></Campo>
-                  <Campo id="m-l2" etiqueta="Leyenda 2"><input id="m-l2" name="leyenda2" type="text" defaultValue={val("leyenda2", m?.leyenda2 ?? "")} className="input" maxLength={255} /></Campo>
-                  <Campo id="m-l3" etiqueta="Leyenda 3" className="sm:col-span-2"><textarea id="m-l3" name="leyenda3" rows={2} defaultValue={val("leyenda3", m?.leyenda3 ?? "")} className="input" maxLength={500} /></Campo>
-                </div>
-              </details>
             </fieldset>
 
             {(estado.error || errorBorrar) && (

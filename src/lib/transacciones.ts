@@ -17,6 +17,7 @@ export type SaldoCuenta = {
 export type Movimiento = {
   id: number;
   cuenta_id: number;
+  folio: number;
   fecha: string;
   orden: number;
   descripcion: string;

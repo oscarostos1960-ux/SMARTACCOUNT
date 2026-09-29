@@ -33,12 +33,12 @@ export async function GET(request: Request, ctx: RouteContext<"/transacciones/[c
     const s = v === null || v === undefined ? "" : String(v);
     return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const encabezado = ["Fecha", "Descripción", "Concepto", "Proveedor", "Referencia", "Cargo", "Abono", "Saldo",
+  const encabezado = ["Folio", "Fecha", "Transacción", "Concepto", "Proveedor", "Referencia", "Cargo", "Abono", "Saldo",
     "Clasificaciones", "Leyenda 1", "Leyenda 2", "Leyenda 3", "Observaciones"];
   const lineas = [encabezado.join(",")];
   for (const m of filas.reverse()) {
     lineas.push([
-      m.fecha, m.descripcion, m.concepto, m.proveedor, m.referencia,
+      m.folio, m.fecha, m.descripcion, m.concepto, m.proveedor, m.referencia,
       Number(m.cargo).toFixed(2), Number(m.abono).toFixed(2), Number(m.saldo).toFixed(2),
       (m.clasificaciones ?? []).map((c) => nombreClasif.get(Number(c))).filter(Boolean).join(" / "),
       m.leyenda1, m.leyenda2, m.leyenda3, m.observaciones,

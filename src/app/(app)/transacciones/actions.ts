@@ -64,13 +64,16 @@ export async function guardarMovimiento(
   if (!(importe > 0)) errores.monto = "Escribe un importe mayor a cero.";
   const tc = fd.get("tipo_cambio") ? monto(fd.get("tipo_cambio")) : 1;
   if (!(tc > 0)) errores.tipo_cambio = "Debe ser mayor a cero.";
+  const folioTexto = texto(fd, "folio", 10);
+  const folio = folioTexto === null ? null : Number(folioTexto);
+  if (folio !== null && !(Number.isInteger(folio) && folio >= 0)) errores.folio = "Escribe un número entero.";
   const descripcion = texto(fd, "descripcion", 250);
   const concepto = idOpcional(fd, "concepto_id");
   const proveedor = idOpcional(fd, "proveedor_id");
   if (!descripcion && !concepto && !proveedor) errores.descripcion = "Escribe una descripción o elige un concepto.";
   if (Object.keys(errores).length) return { errores, valores, error: "Revisa los datos marcados." };
 
-  const datos = {
+  const datos: Record<string, unknown> = {
     cuenta_id: cuentaId,
     fecha,
     cargo: tipo === "cargo" ? importe : 0,
@@ -85,6 +88,7 @@ export async function guardarMovimiento(
     leyenda3: texto(fd, "leyenda3", 500),
     observaciones: texto(fd, "observaciones", 2000),
   };
+  if (folio !== null) datos.folio = folio;
   const clasificaciones = [...new Set(fd.getAll("clasificaciones").map(Number).filter((n) => Number.isInteger(n) && n > 0))];
 
   const supabase = await createClient();
