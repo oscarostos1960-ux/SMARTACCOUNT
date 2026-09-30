@@ -49,6 +49,7 @@ export default function Documentos({ cuentaId, movimientoId, puedeEditar }: { cu
   const [subiendo, setSubiendo] = useState(false);
   const [borrando, startBorrar] = useTransition();
   const entrada = useRef<HTMLInputElement>(null);
+  const [encima, setEncima] = useState(false);
 
   useEffect(() => {
     let vivo = true;
@@ -80,7 +81,13 @@ export default function Documentos({ cuentaId, movimientoId, puedeEditar }: { cu
   }
 
   return (
-    <section className="sm:col-span-6" aria-labelledby={`docs-${movimientoId}`}>
+    <section
+      className={`sm:col-span-6 rounded-lg ${encima ? "bg-primary-soft outline-2 outline-dashed outline-offset-4 outline-primary" : ""}`}
+      aria-labelledby={`docs-${movimientoId}`}
+      onDragOver={puedeEditar ? (e) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); setEncima(true); } } : undefined}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setEncima(false); }}
+      onDrop={puedeEditar ? (e) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); setEncima(false); subir(e.dataTransfer.files); } } : undefined}
+    >
       <div className="mb-2 flex items-center justify-between gap-2">
         <h3 id={`docs-${movimientoId}`} className="label mb-0 flex items-center gap-1.5">
           <Paperclip className="h-4 w-4" aria-hidden /> Documentos {docs ? `(${docs.length})` : ""}
@@ -98,7 +105,7 @@ export default function Documentos({ cuentaId, movimientoId, puedeEditar }: { cu
       {docs === null ? (
         <p className="text-sm text-muted">Cargando…</p>
       ) : docs.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-border px-3 py-3 text-sm text-muted">Sin documentos.</p>
+        <p className="rounded-lg border border-dashed border-border px-3 py-3 text-sm text-muted">Sin documentos.{puedeEditar && " Arrastra aquí un archivo o usa “Adjuntar”."}</p>
       ) : (
         <ul className="divide-y divide-border rounded-lg border border-border">
           {docs.map((d) => (

@@ -52,6 +52,7 @@ export default function MovimientosVista({
         columnasPorDefecto={COLUMNAS_CUENTA}
         clasificaciones={clasificaciones}
         onAbrir={abrir}
+        puedeAdjuntar={puedeEditar ? () => true : undefined}
         vacio={hayFiltros
           ? { titulo: "Ningún movimiento coincide con los filtros", texto: "Prueba con otras fechas o palabras." }
           : { titulo: "Esta cuenta aún no tiene movimientos", texto: puedeEditar ? "Registra el primero con “Nuevo movimiento”." : undefined }}

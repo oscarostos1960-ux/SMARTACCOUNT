@@ -42,6 +42,7 @@ export default function ReporteVista({
         columnasPorDefecto={COLUMNAS_REPORTE}
         clasificaciones={clasificaciones}
         onAbrir={(m) => { setVersion((v) => v + 1); setAbierto(m); }}
+        puedeAdjuntar={editables.length ? (m) => editables.includes(m.cuenta_id) : undefined}
         vacio={{ titulo: "Ningún movimiento coincide con los filtros", texto: "Prueba con otras cuentas, fechas o palabras." }}
       />
       {abierto && (

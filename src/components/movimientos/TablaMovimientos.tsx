@@ -1,19 +1,21 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
-  ArrowLeftRight, ChevronLeft, ChevronRight, Columns3, Download, Mail, MessageCircle, Paperclip, Scale,
+  ArrowLeftRight, ChevronLeft, ChevronRight, Columns3, Download, Loader2, Mail, MessageCircle, Paperclip, Scale,
 } from "lucide-react";
 import { dinero, fecha as fmtFecha } from "@/lib/formato";
 import { COLUMNAS, type ClaveColumna, type Movimiento, type Totales } from "@/lib/transacciones";
 import { useColumnas } from "./columnas";
+import { subirArchivos } from "./Documentos";
 
 export type Clasif = { id: number; nombre: string; color: string; activo: boolean };
 
 export default function TablaMovimientos({
   movimientos, total, totales, pagina, porPagina, enlacePagina, enlaceExportar,
-  claveColumnas, columnasPorDefecto, clasificaciones, onAbrir, acciones, vacio,
+  claveColumnas, columnasPorDefecto, clasificaciones, onAbrir, acciones, vacio, puedeAdjuntar,
 }: {
   movimientos: Movimiento[];
   total: number;
@@ -27,9 +29,11 @@ export default function TablaMovimientos({
   clasificaciones: Clasif[];
   onAbrir: (m: Movimiento) => void;
   acciones?: React.ReactNode;
+  puedeAdjuntar?: (m: Movimiento) => boolean;   // arrastrar y soltar archivos sobre un movimiento
   vacio: { titulo: string; texto?: string };
 }) {
   const [columnas, setColumnas] = useColumnas(claveColumnas, columnasPorDefecto);
+  const soltar = useSoltarArchivos(puedeAdjuntar);
   const paginas = Math.max(1, Math.ceil(total / porPagina));
   const clasifPorId = new Map(clasificaciones.map((c) => [c.id, c]));
   const visibles = COLUMNAS.filter((c) => columnas.includes(c.clave));
@@ -94,6 +98,17 @@ export default function TablaMovimientos({
         </div>
       </div>
 
+      {puedeAdjuntar && movimientos.length > 0 && (
+        <p className="mb-2 hidden items-center gap-1.5 text-xs text-muted md:flex">
+          <Paperclip className="h-3.5 w-3.5" aria-hidden /> Para adjuntar un documento, arrástralo y suéltalo sobre el movimiento.
+        </p>
+      )}
+      {soltar.aviso && (
+        <p role="status" className={`mb-3 flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${soltar.aviso.tipo === "error" ? "bg-danger-soft text-danger" : soltar.aviso.tipo === "ok" ? "bg-ok-soft text-ok" : "bg-primary-soft text-primary"}`}>
+          {soltar.aviso.tipo === "subiendo" && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
+          {soltar.aviso.texto}
+        </p>
+      )}
       {movimientos.length === 0 ? (
         <div className="card px-6 py-16 text-center">
           <p className="font-medium">{vacio.titulo}</p>
@@ -115,7 +130,8 @@ export default function TablaMovimientos({
                 {movimientos.map((m) => (
                   <tr
                     key={m.id}
-                    className="cursor-pointer align-top hover:bg-surface-2"
+                    {...soltar.props(m)}
+                    className={`cursor-pointer align-top hover:bg-surface-2 ${soltar.clase(m)}`}
                     onClick={() => onAbrir(m)}
                     tabIndex={0}
                     onKeyDown={(e) => { if (e.key === "Enter") onAbrir(m); }}
@@ -135,8 +151,8 @@ export default function TablaMovimientos({
           {/* Celular: tarjetas */}
           <ul className="space-y-2 md:hidden">
             {movimientos.map((m) => (
-              <li key={m.id}>
-                <button className="card w-full p-4 text-left" onClick={() => onAbrir(m)}>
+              <li key={m.id} {...soltar.props(m)}>
+                <button className={`card w-full p-4 text-left ${soltar.clase(m)}`} onClick={() => onAbrir(m)}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <p className="num text-xs text-muted">
@@ -234,4 +250,69 @@ function SelectorColumnas({ columnas, onCambio }: { columnas: ClaveColumna[]; on
       )}
     </div>
   );
+}
+
+// Arrastrar y soltar archivos sobre un movimiento para adjuntarlos sin abrirlo.
+function useSoltarArchivos(puedeAdjuntar?: (m: Movimiento) => boolean) {
+  const router = useRouter();
+  const [sobre, setSobre] = useState<number | null>(null);
+  const [subiendo, setSubiendo] = useState<number | null>(null);
+  const [aviso, setAviso] = useState<{ tipo: "subiendo" | "ok" | "error"; texto: string } | null>(null);
+  const activo = !!puedeAdjuntar;
+
+  // Si se suelta fuera de un movimiento, el navegador no debe abrir el archivo.
+  useEffect(() => {
+    if (!activo) return;
+    const evitar = (e: DragEvent) => { if (e.dataTransfer?.types.includes("Files")) e.preventDefault(); };
+    window.addEventListener("dragover", evitar);
+    window.addEventListener("drop", evitar);
+    return () => { window.removeEventListener("dragover", evitar); window.removeEventListener("drop", evitar); };
+  }, [activo]);
+
+  useEffect(() => {
+    if (aviso?.tipo !== "ok") return;
+    const t = setTimeout(() => setAviso(null), 4000);
+    return () => clearTimeout(t);
+  }, [aviso]);
+
+  const conArchivos = (e: React.DragEvent) => e.dataTransfer.types.includes("Files");
+
+  function props(m: Movimiento) {
+    if (!puedeAdjuntar || !puedeAdjuntar(m)) return {};
+    return {
+      onDragEnter: (e: React.DragEvent) => { if (conArchivos(e)) { e.preventDefault(); setSobre(m.id); } },
+      onDragOver: (e: React.DragEvent) => {
+        if (!conArchivos(e)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+        if (sobre !== m.id) setSobre(m.id);
+      },
+      onDragLeave: (e: React.DragEvent) => {
+        if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) setSobre((s) => (s === m.id ? null : s));
+      },
+      onDrop: async (e: React.DragEvent) => {
+        if (!conArchivos(e)) return;
+        e.preventDefault();
+        setSobre(null);
+        const archivos = [...e.dataTransfer.files];
+        if (!archivos.length || subiendo) return;
+        setSubiendo(m.id);
+        setAviso({ tipo: "subiendo", texto: `Adjuntando ${archivos.length} archivo(s) al folio ${m.folio}…` });
+        const errores = await subirArchivos(m.cuenta_id, m.id, archivos);
+        setSubiendo(null);
+        setAviso(errores.length
+          ? { tipo: "error", texto: errores.join(" ") }
+          : { tipo: "ok", texto: `Listo: ${archivos.length === 1 ? `"${archivos[0].name}" quedó adjunto` : `${archivos.length} archivos quedaron adjuntos`} al folio ${m.folio}.` });
+        router.refresh();
+      },
+    };
+  }
+
+  function clase(m: Movimiento) {
+    if (subiendo === m.id) return "opacity-60";
+    if (sobre === m.id) return "bg-primary-soft outline-2 -outline-offset-2 outline-dashed outline-primary";
+    return "";
+  }
+
+  return { props, clase, aviso };
 }

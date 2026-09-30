@@ -224,11 +224,15 @@ export function DialogoMovimiento({
           {m ? (
             <Documentos cuentaId={cuenta.cuenta_id} movimientoId={m.id} puedeEditar={puedeEditar} />
           ) : (
-            <div className="sm:col-span-6">
+            <div
+              className="sm:col-span-6"
+              onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }}
+              onDrop={(e) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); setArchivos((a) => [...a, ...e.dataTransfer.files]); } }}
+            >
               <label htmlFor="m-archivos" className="label flex items-center gap-1.5"><Paperclip className="h-4 w-4" aria-hidden /> Documentos</label>
               {/* Sin "name": los archivos no viajan con el formulario, se suben directo al guardar */}
               <input id="m-archivos" type="file" multiple className="block w-full text-sm file:mr-3 file:rounded-lg file:border file:border-border file:bg-surface file:px-3 file:py-1.5 file:text-sm" onChange={(ev) => setArchivos([...(ev.target.files ?? [])])} />
-              {archivos.length > 0 && <p className="mt-1 text-xs text-muted">{archivos.length} archivo(s) se adjuntarán al guardar.</p>}
+              <p className="mt-1 text-xs text-muted">{archivos.length > 0 ? `${archivos.length} archivo(s) se adjuntarán al guardar: ${archivos.map((a) => a.name).join(", ")}` : "También puedes arrastrarlos aquí."}</p>
             </div>
           )}
         </fieldset>
