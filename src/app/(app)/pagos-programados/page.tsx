@@ -16,6 +16,9 @@ export default async function PagosProgramadosPage(props: PageProps<"/pagos-prog
   const vista = VISTAS.includes(sp.vista as Vista) ? (sp.vista as Vista) : "por-vencer";
   const hoy = hoyCDMX();
   const mes = typeof sp.mes === "string" && /^\d{4}-\d{2}$/.test(sp.mes) ? sp.mes : hoy.slice(0, 7);
+  const fechaParam = (k: string) => (typeof sp[k] === "string" && /^\d{4}-\d{2}-\d{2}$/.test(sp[k] as string) ? (sp[k] as string) : "");
+  const desde = fechaParam("desde");
+  const hasta = fechaParam("hasta");
 
   const permisos = await obtenerPermisos();
   const supabase = await createClient();
@@ -26,6 +29,12 @@ export default async function PagosProgramadosPage(props: PageProps<"/pagos-prog
   let vencR: { data: unknown[] | null; error: { message: string } | null } = { data: [], error: null };
   if (vista === "calendario") {
     vencR = await venc().gte("fecha", `${mes}-01`).lt("fecha", `${moverMes(mes, 1)}-01`);
+  } else if (vista === "por-vencer" && (desde || hasta)) {
+    // Con fechas: todo lo del periodo (pendiente, pagado u omitido)
+    let consulta = venc();
+    if (desde) consulta = consulta.gte("fecha", desde);
+    consulta = consulta.lte("fecha", hasta || sumarDias(hoy, 90));
+    vencR = await consulta;
   } else if (vista === "por-vencer") {
     // Pendientes (incluye atrasados) hasta 90 días, y lo pagado u omitido en los últimos 30 días
     const [pend, hechos] = await Promise.all([
@@ -80,6 +89,8 @@ export default async function PagosProgramadosPage(props: PageProps<"/pagos-prog
           vista={vista}
           mes={mes}
           hoy={hoy}
+          desde={desde}
+          hasta={hasta}
           vencimientos={(vencR.data ?? []) as Vencimiento[]}
           pagos={pagos}
           cuentas={cuentas}

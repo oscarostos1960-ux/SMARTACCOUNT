@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { CalendarDays, ChevronLeft, ChevronRight, ListChecks, Plus, Repeat, Search, Wallet } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { CalendarDays, CheckSquare, ChevronLeft, ChevronRight, Filter, ListChecks, Plus, Repeat, Search, Wallet, X } from "lucide-react";
+import Combobox from "@/components/Combobox";
 import { DialogoMovimiento, type Inicial, type Opcion } from "@/components/movimientos/DialogoMovimiento";
 import type { Clasif } from "@/components/movimientos/TablaMovimientos";
 import { dinero, dineroClave, fecha, sinAcentos } from "@/lib/formato";
@@ -34,12 +36,16 @@ function cuandoTexto(dias: number) {
   return dias < 0 ? `Hace ${-dias} días` : `En ${dias} días`;
 }
 
+export type Filtro = { proveedor: string; concepto: string; soloSeleccionados: boolean };
+
 export default function PagosVista({
-  vista, mes, hoy, vencimientos, pagos, cuentas, cuentasEditables, esTitular, conceptos, proveedores, clasificaciones,
+  vista, mes, hoy, desde, hasta, vencimientos, pagos, cuentas, cuentasEditables, esTitular, conceptos, proveedores, clasificaciones,
 }: {
   vista: Vista;
   mes: string;
   hoy: string;
+  desde: string;
+  hasta: string;
   vencimientos: Vencimiento[];
   pagos: PagoProgramado[];
   cuentas: CuentaCorta[];
@@ -52,6 +58,17 @@ export default function PagosVista({
   const [abierto, setAbierto] = useState<Abierto | null>(null);
   const [version, setVersion] = useState(0);
   const [preparando, setPreparando] = useState<number | null>(null);
+  const [filtro, setFiltro] = useState<Filtro>({ proveedor: "", concepto: "", soloSeleccionados: false });
+  const [seleccion, setSeleccion] = useState<Set<number>>(new Set());
+  const filtrados = useMemo(() => vencimientos.filter((v) =>
+    (!filtro.proveedor || String(v.proveedor_id) === filtro.proveedor)
+    && (!filtro.concepto || String(v.concepto_id) === filtro.concepto)
+    && (!filtro.soloSeleccionados || seleccion.has(v.id))), [vencimientos, filtro, seleccion]);
+  const alternar = (id: number) => setSeleccion((s) => {
+    const n = new Set(s);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  });
   const planes = useMemo(() => new Map(pagos.map((p) => [p.id, p])), [pagos]);
   const editables = useMemo(() => new Set(cuentasEditables.map((c) => c.cuenta_id)), [cuentasEditables]);
   const puedeCambiar = (v: Vencimiento) => esTitular || (v.cuenta_id !== null && editables.has(v.cuenta_id));
@@ -96,12 +113,18 @@ export default function PagosVista({
         )}
       </div>
 
+      {vista !== "pagos" && (
+        <FiltrosPagos vista={vista} vencimientos={vencimientos} filtro={filtro} onFiltro={setFiltro}
+          desde={desde} hasta={hasta} mes={mes} seleccionados={seleccion.size} />
+      )}
       {vista === "por-vencer" && (
-        <PorVencer hoy={hoy} vencimientos={vencimientos} puedePagar={puedePagar} preparando={preparando}
+        <PorVencer hoy={hoy} vencimientos={filtrados} puedePagar={puedePagar} preparando={preparando}
+          conFiltros={!!(filtro.proveedor || filtro.concepto || filtro.soloSeleccionados || desde || hasta)}
+          rango={!!(desde || hasta)} seleccion={seleccion} onSeleccionar={alternar} onSeleccion={setSeleccion}
           onPagar={pagar} onAbrir={(v) => abrir({ tipo: "vencimiento", v })} />
       )}
       {vista === "calendario" && (
-        <Calendario mes={mes} hoy={hoy} vencimientos={vencimientos} onAbrir={(v) => abrir({ tipo: "vencimiento", v })} />
+        <Calendario mes={mes} hoy={hoy} vencimientos={filtrados} onAbrir={(v) => abrir({ tipo: "vencimiento", v })} />
       )}
       {vista === "pagos" && (
         <Catalogo pagos={pagos} cuentas={cuentas} proveedores={proveedores} conceptos={conceptos} hoy={hoy}
@@ -161,11 +184,16 @@ export default function PagosVista({
 }
 
 // ---------- Por vencer ----------------------------------------------------------
-function PorVencer({ hoy, vencimientos, puedePagar, preparando, onPagar, onAbrir }: {
+function PorVencer({ hoy, vencimientos, puedePagar, preparando, conFiltros, rango, seleccion, onSeleccionar, onSeleccion, onPagar, onAbrir }: {
   hoy: string;
   vencimientos: Vencimiento[];
   puedePagar: (v: Vencimiento) => boolean;
   preparando: number | null;
+  conFiltros: boolean;
+  rango: boolean;
+  seleccion: Set<number>;
+  onSeleccionar: (id: number) => void;
+  onSeleccion: (s: Set<number>) => void;
   onPagar: (v: Vencimiento) => void;
   onAbrir: (v: Vencimiento) => void;
 }) {
@@ -174,16 +202,52 @@ function PorVencer({ hoy, vencimientos, puedePagar, preparando, onPagar, onAbrir
     { id: "vencidos", titulo: "Vencidos", tono: "danger", lista: pendientes.filter((v) => v.fecha < hoy) },
     { id: "semana", titulo: "Próximos 7 días", tono: "warn", lista: pendientes.filter((v) => v.fecha >= hoy && v.fecha <= sumarDias(hoy, 7)) },
     { id: "mes", titulo: "Del día 8 al 30", tono: "primary", lista: pendientes.filter((v) => v.fecha > sumarDias(hoy, 7) && v.fecha <= sumarDias(hoy, 30)) },
-    { id: "despues", titulo: "Del día 31 al 90", tono: "muted", lista: pendientes.filter((v) => v.fecha > sumarDias(hoy, 30)) },
+    { id: "despues", titulo: rango ? "Del día 31 en adelante" : "Del día 31 al 90", tono: "muted", lista: pendientes.filter((v) => v.fecha > sumarDias(hoy, 30)) },
   ];
-  const [verDespues, setVerDespues] = useState(false);
+  const [verDespuesManual, setVerDespues] = useState<boolean | null>(null);
+  const verDespues = verDespuesManual ?? conFiltros;
   const hechos = vencimientos.filter((v) => v.estado !== "pendiente").sort((a, b) => b.fecha.localeCompare(a.fecha));
+  const elegidos = vencimientos.filter((v) => seleccion.has(v.id));
+  const todosElegidos = pendientes.length > 0 && pendientes.every((v) => seleccion.has(v.id));
+  const fila = (v: Vencimiento, pagable: boolean) => (
+    <Fila key={v.id} v={v} hoy={hoy} puedePagar={pagable && puedePagar(v)} preparando={preparando === v.id}
+      seleccionado={seleccion.has(v.id)} onSeleccionar={onSeleccionar} onPagar={onPagar} onAbrir={onAbrir} />
+  );
   const tonos: Record<string, string> = {
     danger: "text-danger", warn: "text-warn", primary: "text-primary", muted: "text-text",
   };
 
   return (
     <div className="space-y-6">
+      <section aria-label="Totales" className="card flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="text-sm">
+          <p className="text-muted">{conFiltros ? "Total de lo filtrado" : "Total por pagar"} · {pendientes.length} {pendientes.length === 1 ? "pago pendiente" : "pagos pendientes"}</p>
+          <p className="num text-2xl font-semibold" data-total-filtrado>{totalPorMoneda(pendientes)}</p>
+        </div>
+        <div className="flex flex-col gap-2 sm:items-end">
+          {elegidos.length > 0 && (
+            <p className="text-sm">
+              <span className="font-medium text-primary">{elegidos.length} seleccionado{elegidos.length > 1 ? "s" : ""}</span>
+              {" · "}<span className="num font-semibold" data-total-seleccion>{totalPorMoneda(elegidos)}</span>
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            {pendientes.length > 0 && (
+              <button type="button" className="btn-secondary px-3 py-1.5" onClick={() => {
+                const n = new Set(seleccion);
+                for (const v of pendientes) { if (todosElegidos) n.delete(v.id); else n.add(v.id); }
+                onSeleccion(n);
+              }}>
+                <CheckSquare className="h-4 w-4" aria-hidden /> {todosElegidos ? "Quitar los mostrados" : "Seleccionar los mostrados"}
+              </button>
+            )}
+            {seleccion.size > 0 && (
+              <button type="button" className="btn-ghost px-3 py-1.5" onClick={() => onSeleccion(new Set())}>Quitar selección</button>
+            )}
+          </div>
+        </div>
+      </section>
+
       <section aria-label="Resumen" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {grupos.map((g) => (
           <a key={g.id} href={`#${g.id}`} onClick={() => { if (g.id === "despues") setVerDespues(true); }} className="card p-4 hover:shadow-md">
@@ -198,30 +262,30 @@ function PorVencer({ hoy, vencimientos, puedePagar, preparando, onPagar, onAbrir
         <details key={g.id} id={g.id} className="card scroll-mt-4" open={verDespues} onToggle={(e) => setVerDespues(e.currentTarget.open)}>
           <summary className="cursor-pointer px-5 py-3 font-semibold">{g.titulo} ({g.lista.length})</summary>
           <ul className="divide-y divide-border border-t border-border">
-            {g.lista.map((v) => <Fila key={v.id} v={v} hoy={hoy} puedePagar={puedePagar(v)} preparando={preparando === v.id} onPagar={onPagar} onAbrir={onAbrir} />)}
+            {g.lista.map((v) => fila(v, true))}
           </ul>
         </details>
       ) : (
         <section key={g.id} id={g.id} aria-labelledby={`t-${g.id}`} className="scroll-mt-4">
           <h2 id={`t-${g.id}`} className={`mb-2 font-semibold ${tonos[g.tono]}`}>{g.titulo}</h2>
           <ul className="card divide-y divide-border">
-            {g.lista.map((v) => <Fila key={v.id} v={v} hoy={hoy} puedePagar={puedePagar(v)} preparando={preparando === v.id} onPagar={onPagar} onAbrir={onAbrir} />)}
+            {g.lista.map((v) => fila(v, true))}
           </ul>
         </section>
       )))}
 
       {pendientes.length === 0 && (
         <div className="card p-10 text-center">
-          <p className="font-medium">No hay pagos pendientes en los próximos 90 días</p>
-          <p className="mt-1 text-sm text-muted">Crea uno con “Nuevo pago programado”.</p>
+          <p className="font-medium">{conFiltros ? "Ningún pago pendiente coincide con los filtros" : "No hay pagos pendientes en los próximos 90 días"}</p>
+          <p className="mt-1 text-sm text-muted">{conFiltros ? "Cambia o limpia los filtros." : "Crea uno con “Nuevo pago programado”."}</p>
         </div>
       )}
 
       {hechos.length > 0 && (
         <details className="card">
-          <summary className="cursor-pointer px-5 py-3 text-sm font-medium">Pagados u omitidos en los últimos 30 días ({hechos.length})</summary>
+          <summary className="cursor-pointer px-5 py-3 text-sm font-medium">{rango ? "Pagados u omitidos en el periodo" : "Pagados u omitidos en los últimos 30 días"} ({hechos.length}) · <span className="num">{totalPorMoneda(hechos.filter((v) => v.estado === "pagado"))}</span> pagado</summary>
           <ul className="divide-y divide-border border-t border-border">
-            {hechos.map((v) => <Fila key={v.id} v={v} hoy={hoy} puedePagar={false} preparando={false} onPagar={onPagar} onAbrir={onAbrir} />)}
+            {hechos.map((v) => fila(v, false))}
           </ul>
         </details>
       )}
@@ -229,15 +293,17 @@ function PorVencer({ hoy, vencimientos, puedePagar, preparando, onPagar, onAbrir
   );
 }
 
-function Fila({ v, hoy, puedePagar, preparando, onPagar, onAbrir }: {
-  v: Vencimiento; hoy: string; puedePagar: boolean; preparando: boolean;
-  onPagar: (v: Vencimiento) => void; onAbrir: (v: Vencimiento) => void;
+function Fila({ v, hoy, puedePagar, preparando, seleccionado, onSeleccionar, onPagar, onAbrir }: {
+  v: Vencimiento; hoy: string; puedePagar: boolean; preparando: boolean; seleccionado: boolean;
+  onSeleccionar: (id: number) => void; onPagar: (v: Vencimiento) => void; onAbrir: (v: Vencimiento) => void;
 }) {
   const dias = diasEntre(hoy, v.fecha);
   const [, m, d] = v.fecha.split("-");
   const mesCorto = fecha(v.fecha).split(" ")[1];
   return (
-    <li className="flex items-center gap-3 px-4 py-3">
+    <li className={`flex items-center gap-3 px-4 py-3 ${seleccionado ? "bg-primary-soft/60" : ""}`}>
+      <input type="checkbox" checked={seleccionado} onChange={() => onSeleccionar(v.id)} className="h-4 w-4 shrink-0 accent-[var(--primary)]"
+        aria-label={`Seleccionar ${v.proveedor ?? v.descripcion}, ${fecha(v.fecha)}`} />
       <button type="button" onClick={() => onAbrir(v)} className="flex min-w-0 flex-1 items-center gap-3 text-left" aria-label={`${v.proveedor ?? v.descripcion}, ${fecha(v.fecha)}`}>
         <span className={`flex w-12 shrink-0 flex-col items-center rounded-lg border py-1 ${v.estado === "pendiente" && dias < 0 ? "border-danger text-danger" : "border-border"}`} data-mes={m}>
           <span className="num text-lg font-semibold leading-none">{Number(d)}</span>
@@ -430,5 +496,85 @@ function Catalogo({ pagos, cuentas, proveedores, conceptos, hoy, onAbrir }: {
         </table>
       </div>
     </div>
+  );
+}
+
+// ---------- Filtros ----------------------------------------------------------------
+function FiltrosPagos({ vista, vencimientos, filtro, onFiltro, desde, hasta, mes, seleccionados }: {
+  vista: Vista; vencimientos: Vencimiento[]; filtro: Filtro; onFiltro: (f: Filtro) => void;
+  desde: string; hasta: string; mes: string; seleccionados: number;
+}) {
+  const router = useRouter();
+  const [version, setVersion] = useState(0);
+  // Solo proveedores y conceptos que aparecen en las fechas cargadas
+  const opciones = (clave: "proveedor" | "concepto") => {
+    const m = new Map<string, string>();
+    for (const v of vencimientos) {
+      const id = v[`${clave}_id`];
+      if (id != null && v[clave]) m.set(String(id), v[clave]!);
+    }
+    return [...m].map(([valor, etiqueta]) => ({ valor, etiqueta })).sort((a, b) => a.etiqueta.localeCompare(b.etiqueta, "es"));
+  };
+  function irFechas(d: string, h: string) {
+    const q = new URLSearchParams();
+    if (d) q.set("desde", d);
+    if (h) q.set("hasta", h);
+    router.replace(`/pagos-programados${q.size ? `?${q}` : ""}`, { scroll: false });
+  }
+  const hayFiltros = !!(filtro.proveedor || filtro.concepto || filtro.soloSeleccionados || desde || hasta);
+  function limpiar() {
+    onFiltro({ proveedor: "", concepto: "", soloSeleccionados: false });
+    setVersion((x) => x + 1);
+    if (desde || hasta) irFechas("", "");
+  }
+
+  return (
+    <section aria-label="Filtros" className="card mb-5 p-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-12 lg:items-end">
+        <div className="lg:col-span-4">
+          <label htmlFor="f-proveedor" className="label">A favor de</label>
+          <Combobox key={`p${version}`} id="f-proveedor" nombre="f_proveedor" opciones={opciones("proveedor")} valorInicial={filtro.proveedor}
+            placeholder="Todos" onCambio={(valor) => onFiltro({ ...filtro, proveedor: valor })} />
+        </div>
+        <div className="lg:col-span-3">
+          <label htmlFor="f-concepto" className="label">Concepto</label>
+          <Combobox key={`c${version}`} id="f-concepto" nombre="f_concepto" opciones={opciones("concepto")} valorInicial={filtro.concepto}
+            placeholder="Todos" onCambio={(valor) => onFiltro({ ...filtro, concepto: valor })} />
+        </div>
+        {vista === "por-vencer" ? (
+          <>
+            <div className="lg:col-span-2">
+              <label htmlFor="f-desde" className="label">Desde</label>
+              <input key={`d${desde}`} id="f-desde" type="date" defaultValue={desde} className="input"
+                onChange={(e) => { if (!e.target.value || e.target.value.length === 10) irFechas(e.target.value, hasta); }} />
+            </div>
+            <div className="lg:col-span-2">
+              <label htmlFor="f-hasta" className="label">Hasta</label>
+              <input key={`h${hasta}`} id="f-hasta" type="date" defaultValue={hasta} className="input"
+                onChange={(e) => { if (!e.target.value || e.target.value.length === 10) irFechas(desde, e.target.value); }} />
+            </div>
+          </>
+        ) : (
+          <p className="text-sm text-muted lg:col-span-4">Mostrando {nombreMes(mes)}.</p>
+        )}
+        <div className="flex items-center gap-3 lg:col-span-1 lg:justify-end">
+          {hayFiltros && (
+            <button type="button" className="btn-ghost px-2 py-2" onClick={limpiar} title="Limpiar filtros" aria-label="Limpiar filtros">
+              <X className="h-4 w-4" aria-hidden /> <span className="lg:sr-only">Limpiar</span>
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={filtro.soloSeleccionados} onChange={(e) => onFiltro({ ...filtro, soloSeleccionados: e.target.checked })}
+            className="h-4 w-4 accent-[var(--primary)]" />
+          Solo seleccionados {seleccionados > 0 && <span className="badge bg-primary-soft text-primary">{seleccionados}</span>}
+        </label>
+        {vista === "por-vencer" && !desde && !hasta && (
+          <span className="flex items-center gap-1.5 text-muted"><Filter className="h-3.5 w-3.5" aria-hidden /> Sin fechas: pendientes hasta 90 días y lo pagado en los últimos 30.</span>
+        )}
+      </div>
+    </section>
   );
 }
