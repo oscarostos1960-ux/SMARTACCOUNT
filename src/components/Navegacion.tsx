@@ -17,7 +17,7 @@ const SECCIONES: { titulo?: string; items: Item[]; soloTitular?: boolean }[] = [
       { href: "/", texto: "Inicio", icono: Home },
       { href: "/transacciones", texto: "Transacciones", icono: ArrowLeftRight },
       { href: "/reporte", texto: "Reporte de movimientos", icono: FileSearch },
-      { href: "/pagos-programados", texto: "Pagos programados", icono: CalendarClock, proximamente: true },
+      { href: "/pagos-programados", texto: "Pagos programados", icono: CalendarClock },
       { href: "/importar", texto: "Importar estados de cuenta", icono: Upload, proximamente: true },
       { href: "/reportes", texto: "Reportes", icono: BarChart3, proximamente: true },
     ],

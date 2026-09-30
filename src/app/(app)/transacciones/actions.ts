@@ -46,6 +46,7 @@ function mensaje(codigo: string | undefined, msg: string) {
 function refrescar() {
   revalidatePath("/transacciones", "layout");
   revalidatePath("/reporte");
+  revalidatePath("/pagos-programados");
   revalidatePath("/");
 }
 
@@ -116,6 +117,15 @@ export async function guardarMovimiento(
     if (error) return { valores, error: mensaje(error.code, error.message) };
   }
 
+  // Pago de un vencimiento programado: queda marcado como pagado con este movimiento.
+  const vencimientoId = idOpcional(fd, "vencimiento_id");
+  if (!id && vencimientoId && movimientoId) {
+    const { error } = await supabase.from("vencimientos")
+      .update({ estado: "pagado", transaccion_id: movimientoId, pagado_en: new Date().toISOString() })
+      .eq("id", vencimientoId);
+    // El movimiento ya quedó guardado: no se regresa error para no capturarlo dos veces.
+    if (error) console.error("No se pudo marcar el vencimiento como pagado", vencimientoId, error.message);
+  }
   refrescar();
   return { ok: true, id: movimientoId ?? undefined };
 }
@@ -271,4 +281,11 @@ export async function eliminarDocumento(id: number): Promise<{ error?: string }>
   await supabase.storage.from("documentos").remove([doc.ruta as string]);
   refrescar();
   return {};
+}
+
+// Siguiente folio de una cuenta (para capturar en una cuenta distinta a la de la página)
+export async function siguienteFolioCuenta(cuentaId: number): Promise<number> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("transacciones").select("folio").eq("cuenta_id", cuentaId).order("folio", { ascending: false }).limit(1);
+  return Number(data?.[0]?.folio ?? 0) + 1;
 }

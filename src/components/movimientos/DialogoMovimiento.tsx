@@ -6,7 +6,7 @@ import Combobox, { type OpcionCombo } from "@/components/Combobox";
 import { fecha as fmtFecha, hoyCDMX } from "@/lib/formato";
 import type { CuentaCorta, Movimiento } from "@/lib/transacciones";
 import {
-  eliminarMovimiento, guardarMovimiento, guardarTransferencia, ultimoMovimientoProveedor,
+  eliminarMovimiento, guardarMovimiento, guardarTransferencia, siguienteFolioCuenta, ultimoMovimientoProveedor,
   type Plantilla, type ResultadoMovimiento,
 } from "@/app/(app)/transacciones/actions";
 import Documentos, { subirArchivos } from "./Documentos";
@@ -14,7 +14,7 @@ import type { Clasif } from "./TablaMovimientos";
 
 export type Opcion = OpcionCombo & { activo: boolean };
 
-function Dialogo({ titulo, refDialogo, onCerrar, children }: {
+export function Dialogo({ titulo, refDialogo, onCerrar, children }: {
   titulo: string; refDialogo: React.RefObject<HTMLDialogElement | null>; onCerrar: () => void; children: React.ReactNode;
 }) {
   useEffect(() => { refDialogo.current?.showModal(); }, [refDialogo]);
@@ -34,7 +34,7 @@ function Dialogo({ titulo, refDialogo, onCerrar, children }: {
   );
 }
 
-function Campo({ id, etiqueta, error, requerido, ayuda, className = "", children }: {
+export function Campo({ id, etiqueta, error, requerido, ayuda, className = "", children }: {
   id: string; etiqueta: string; error?: string; requerido?: boolean; ayuda?: string; className?: string; children: React.ReactNode;
 }) {
   return (
@@ -47,8 +47,12 @@ function Campo({ id, etiqueta, error, requerido, ayuda, className = "", children
   );
 }
 
+// Datos para llenar un movimiento nuevo (por ejemplo, al pagar un pago programado)
+export type Inicial = Plantilla & { proveedor_id: string };
+
 export function DialogoMovimiento({
   cuenta, movimiento, siguienteFolio, conceptos, proveedores, clasificaciones, puedeEditar, onCerrar,
+  cuentas, inicial, aviso, titulo: tituloFijo, vencimientoId,
 }: {
   cuenta: CuentaCorta;
   movimiento: Movimiento | null;
@@ -58,13 +62,20 @@ export function DialogoMovimiento({
   clasificaciones: Clasif[];
   puedeEditar: boolean;
   onCerrar: () => void;
+  cuentas?: CuentaCorta[];        // si viene, se puede elegir la cuenta
+  inicial?: Inicial;
+  aviso?: string;
+  titulo?: string;
+  vencimientoId?: number;
 }) {
-  const accion = guardarMovimiento.bind(null, cuenta.cuenta_id, movimiento?.id ?? null);
+  const [cuentaSel, setCuentaSel] = useState(cuenta);
+  const [folio, setFolio] = useState({ valor: siguienteFolio, version: 0 });
+  const accion = guardarMovimiento.bind(null, cuentaSel.cuenta_id, movimiento?.id ?? null);
   const [estado, formAction, guardando] = useActionState<ResultadoMovimiento, FormData>(accion, {});
   const [confirmarBorrar, setConfirmarBorrar] = useState(false);
   const [borrando, startBorrar] = useTransition();
   const [errorBorrar, setErrorBorrar] = useState<string>();
-  const [plantilla, setPlantilla] = useState<Plantilla | null>(null);
+  const [plantilla, setPlantilla] = useState<Plantilla | null>(inicial ?? null);
   const [version, setVersion] = useState(0);
   const [archivos, setArchivos] = useState<File[]>([]);
   const [subiendo, setSubiendo] = useState(false);
@@ -82,7 +93,7 @@ export function DialogoMovimiento({
     let vivo = true;
     (async () => {
       setSubiendo(true);
-      const errores = await subirArchivos(cuenta.cuenta_id, estado.id!, archivos);
+      const errores = await subirArchivos(cuentaSel.cuenta_id, estado.id!, archivos);
       if (!vivo) return;
       setSubiendo(false);
       if (errores.length) setErrorArchivos(`El movimiento se guardó, pero: ${errores.join(" ")}`);
@@ -106,11 +117,19 @@ export function DialogoMovimiento({
   const clasifVisibles = clasificaciones.filter((c) => c.activo || clasifElegidas.has(String(c.id)));
   const e = estado.errores ?? {};
   const soloLectura = !puedeEditar;
-  const titulo = soloLectura ? "Detalle del movimiento" : m ? `Editar movimiento · folio ${m.folio}` : "Nuevo movimiento";
+  const titulo = tituloFijo ?? (soloLectura ? "Detalle del movimiento" : m ? `Editar movimiento · folio ${m.folio}` : "Nuevo movimiento");
+
+  async function cambiarCuenta(id: string) {
+    const nueva = cuentas?.find((c) => String(c.cuenta_id) === id);
+    if (!nueva) return;
+    setCuentaSel(nueva);
+    const siguiente = await siguienteFolioCuenta(nueva.cuenta_id);
+    setFolio((f) => ({ valor: siguiente, version: f.version + 1 }));
+  }
 
   async function alElegirProveedor(valor: string) {
     if (m || !valor) return;
-    const datos = await ultimoMovimientoProveedor(Number(valor), cuenta.cuenta_id);
+    const datos = await ultimoMovimientoProveedor(Number(valor), cuentaSel.cuenta_id);
     if (datos) {
       setPlantilla(datos);
       setVersion((x) => x + 1);
@@ -141,23 +160,31 @@ export function DialogoMovimiento({
           {p && !m && (
             <p className="flex items-start gap-2 rounded-lg bg-primary-soft px-3 py-2 text-sm text-primary sm:col-span-6">
               <Sparkles className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-              <span>Datos copiados del último movimiento con este proveedor (folio {p.folio_origen}, {fmtFecha(p.fecha_origen)}{p.cuenta_origen !== cuenta.nombre ? `, ${p.cuenta_origen}` : ""}). Revisa y cambia lo que necesites.</span>
+              <span>{p === inicial && aviso ? aviso : <>Datos copiados del último movimiento con este proveedor (folio {p.folio_origen}, {fmtFecha(p.fecha_origen)}{p.cuenta_origen !== cuentaSel.nombre ? `, ${p.cuenta_origen}` : ""}). Revisa y cambia lo que necesites.</>}</span>
             </p>
+          )}
+          {vencimientoId && <input type="hidden" name="vencimiento_id" value={vencimientoId} />}
+          {cuentas && !m && (
+            <Campo id="m-cuenta" etiqueta="Cuenta" requerido className="sm:col-span-6" ayuda="Cuenta de la que sale (o a la que entra) el dinero.">
+              <select id="m-cuenta" value={cuentaSel.cuenta_id} onChange={(ev) => cambiarCuenta(ev.target.value)} className="input">
+                {cuentas.map((c) => <option key={c.cuenta_id} value={c.cuenta_id}>{c.nombre} ({c.moneda})</option>)}
+              </select>
+            </Campo>
           )}
 
           <Campo id="m-proveedor" etiqueta="A favor de (proveedor)" className="sm:col-span-6" ayuda={!m ? "Al elegirlo, se llenan los datos de su último movimiento." : undefined}>
-            <Combobox id="m-proveedor" nombre="proveedor_id" opciones={proveedoresVisibles} valorInicial={val("proveedor_id", m?.proveedor_id ? String(m.proveedor_id) : "")} placeholder="Buscar proveedor…" onCambio={alElegirProveedor} />
+            <Combobox id="m-proveedor" nombre="proveedor_id" opciones={proveedoresVisibles} valorInicial={val("proveedor_id", m?.proveedor_id ? String(m.proveedor_id) : inicial?.proveedor_id ?? "")} placeholder="Buscar proveedor…" onCambio={alElegirProveedor} />
           </Campo>
 
           <Campo id="m-folio" etiqueta="Folio" error={e.folio} className="sm:col-span-2"
             ayuda={m ? "Si lo cambias, el movimiento se mueve a ese lugar." : "Si usas un folio ya ocupado, se inserta ahí y los siguientes se recorren."}>
-            <input id="m-folio" name="folio" type="text" inputMode="numeric" defaultValue={val("folio", m ? String(m.folio) : String(siguienteFolio))} className="input num" aria-invalid={!!e.folio} />
+            <input key={folio.version} id="m-folio" name="folio" type="text" inputMode="numeric" defaultValue={folio.version ? String(folio.valor) : val("folio", m ? String(m.folio) : String(folio.valor))} className="input num" aria-invalid={!!e.folio} />
           </Campo>
           <Campo id="m-fecha" etiqueta="Fecha" requerido error={e.fecha} className="sm:col-span-2">
             <input id="m-fecha" name="fecha" type="date" required defaultValue={val("fecha", m?.fecha ?? hoyCDMX())} className="input" aria-invalid={!!e.fecha} />
           </Campo>
           <Campo id="m-ref" etiqueta="Cheque / referencia" className="sm:col-span-2">
-            <input id="m-ref" name="referencia" type="text" defaultValue={val("referencia", m?.referencia ?? "")} className="input" maxLength={100} />
+            <input id="m-ref" name="referencia" type="text" defaultValue={val("referencia", m?.referencia ?? p?.referencia ?? "")} className="input" maxLength={100} />
           </Campo>
 
           {/* Campos que se pueden prellenar: se vuelven a dibujar al elegir proveedor */}
@@ -176,7 +203,7 @@ export function DialogoMovimiento({
               </div>
               {e.tipo && <p className="mt-1 text-xs text-danger">{e.tipo}</p>}
             </fieldset>
-            <Campo id="m-monto" etiqueta={`Importe (${cuenta.moneda})`} requerido error={e.monto} className="sm:col-span-3">
+            <Campo id="m-monto" etiqueta={`Importe (${cuentaSel.moneda})`} requerido error={e.monto} className="sm:col-span-3">
               <input id="m-monto" name="monto" type="text" inputMode="decimal" required defaultValue={montoInicial} className="input num text-right" aria-invalid={!!e.monto} placeholder="0.00" />
             </Campo>
             <Campo id="m-desc" etiqueta="Transacción" error={e.descripcion} className="sm:col-span-6">
@@ -191,11 +218,11 @@ export function DialogoMovimiento({
             <Campo id="m-l3" etiqueta="Leyenda 3" className="sm:col-span-6">
               <input id="m-l3" name="leyenda3" type="text" defaultValue={val("leyenda3", m?.leyenda3 ?? p?.leyenda3 ?? "")} className="input" maxLength={500} />
             </Campo>
-            <Campo id="m-concepto" etiqueta="Concepto" className={cuenta.moneda !== "MXN" ? "sm:col-span-4" : "sm:col-span-6"}>
+            <Campo id="m-concepto" etiqueta="Concepto" className={cuentaSel.moneda !== "MXN" ? "sm:col-span-4" : "sm:col-span-6"}>
               <Combobox id="m-concepto" nombre="concepto_id" opciones={conceptosVisibles} valorInicial={conceptoInicial} placeholder="Buscar concepto…" />
             </Campo>
-            {cuenta.moneda !== "MXN" ? (
-              <Campo id="m-tc" etiqueta="Tipo de cambio" error={e.tipo_cambio} className="sm:col-span-2" ayuda={`Pesos por 1 ${cuenta.moneda}`}>
+            {cuentaSel.moneda !== "MXN" ? (
+              <Campo id="m-tc" etiqueta="Tipo de cambio" error={e.tipo_cambio} className="sm:col-span-2" ayuda={`Pesos por 1 ${cuentaSel.moneda}`}>
                 <input id="m-tc" name="tipo_cambio" type="text" inputMode="decimal" defaultValue={val("tipo_cambio", m ? String(Number(m.tipo_cambio)) : "1")} className="input num text-right" />
               </Campo>
             ) : (

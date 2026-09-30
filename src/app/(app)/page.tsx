@@ -1,14 +1,15 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { obtenerPerfil } from "@/lib/auth";
-import { Landmark, Users, Tag, Tags, CheckCircle2, Circle, ChevronRight } from "lucide-react";
-import { dinero, fecha } from "@/lib/formato";
+import { Landmark, Users, Tag, Tags, CheckCircle2, Circle, ChevronRight, CalendarClock } from "lucide-react";
+import { dinero, dineroClave, fecha, hoyCDMX } from "@/lib/formato";
+import { sumarDias } from "@/lib/pagos";
 import type { SaldoCuenta } from "@/lib/transacciones";
 
 const FASES = [
   { n: 1, texto: "Acceso seguro y catálogos", lista: true },
   { n: 2, texto: "Transacciones y saldos", lista: true },
-  { n: 3, texto: "Pagos programados con aviso por WhatsApp y correo", lista: false },
+  { n: 3, texto: "Pagos programados (los avisos por WhatsApp y correo van después)", lista: true },
   { n: 4, texto: "Importación de estados de cuenta sin duplicados", lista: false },
   { n: 5, texto: "Reportes, tablero y vista del contador", lista: false },
   { n: 6, texto: "Migración de tus datos y comprobantes", lista: false },
@@ -20,11 +21,17 @@ export default async function Inicio() {
   const contar = async (tabla: string, activo: string) =>
     (await supabase.from(tabla).select("id", { count: "exact", head: true }).eq(activo, true)).count ?? 0;
 
-  const [cuentas, proveedores, conceptos, clasificaciones, saldosR] = await Promise.all([
+  const hoy = hoyCDMX();
+  const [cuentas, proveedores, conceptos, clasificaciones, saldosR, pagosR] = await Promise.all([
     contar("cuentas", "activa"), contar("proveedores", "activo"),
     contar("conceptos", "activo"), contar("clasificaciones", "activo"),
     supabase.from("v_saldos_cuentas").select("*").eq("activa", true).order("ultimo_movimiento", { ascending: false, nullsFirst: false }),
+    supabase.from("v_vencimientos").select("id, fecha, importe, moneda, tipo, proveedor, concepto, descripcion")
+      .eq("estado", "pendiente").lte("fecha", sumarDias(hoy, 7)).order("fecha").limit(200),
   ]);
+  type Proximo = { id: number; fecha: string; importe: number; moneda: string; tipo: string; proveedor: string | null; concepto: string | null; descripcion: string };
+  const proximos = (pagosR.data ?? []) as Proximo[];
+  const vencidos = proximos.filter((p) => p.fecha < hoy).length;
   const saldos = (saldosR.data ?? []) as SaldoCuenta[];
 
   const tarjetas = [
@@ -42,6 +49,30 @@ export default async function Inicio() {
           {perfil.rol === "usuario" ? "Tienes acceso a las cuentas que te asignó el titular." : "Este es el resumen de tu Smart Account."}
         </p>
       </header>
+
+      {proximos.length > 0 && (
+        <section className="mb-8" aria-labelledby="proximos">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 id="proximos" className="flex items-center gap-2 font-semibold">
+              <CalendarClock className="h-4 w-4 text-primary" aria-hidden /> Pagos de esta semana
+              {vencidos > 0 && <span className="badge bg-danger-soft text-danger">{vencidos} vencido{vencidos > 1 ? "s" : ""}</span>}
+            </h2>
+            <Link href="/pagos-programados" className="text-sm font-medium text-primary hover:underline">Ver todos</Link>
+          </div>
+          <ul className="card divide-y divide-border">
+            {proximos.slice(0, 8).map((p) => (
+              <li key={p.id} className="flex items-center gap-3 px-5 py-2.5 text-sm">
+                <span className={`w-24 shrink-0 ${p.fecha < hoy ? "font-medium text-danger" : "text-muted"}`}>{p.fecha === hoy ? "Hoy" : fecha(p.fecha)}</span>
+                <span className="min-w-0 flex-1 truncate">{p.proveedor ?? p.concepto ?? p.descripcion}</span>
+                <span className="num font-medium">{Number(p.importe) > 0 ? dineroClave(p.importe, p.moneda) : "Variable"}</span>
+              </li>
+            ))}
+            {proximos.length > 8 && (
+              <li><Link href="/pagos-programados" className="block px-5 py-2.5 text-sm text-primary hover:underline">y {proximos.length - 8} más…</Link></li>
+            )}
+          </ul>
+        </section>
+      )}
 
       {saldos.length > 0 && (
         <section className="mb-8" aria-labelledby="saldos">
