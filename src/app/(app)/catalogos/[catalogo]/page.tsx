@@ -42,6 +42,14 @@ export default async function CatalogoPage(props: PageProps<"/catalogos/[catalog
     }));
   }
 
+  // Cuántos movimientos usa cada registro (para detectar y fusionar duplicados)
+  const fusionable = ["proveedores", "conceptos", "clasificaciones"].includes(catalogo.clave);
+  let usos: Record<number, number> | undefined;
+  if (fusionable) {
+    const { data } = await supabase.rpc("conteo_usos", { p_catalogo: catalogo.clave });
+    usos = Object.fromEntries(((data ?? []) as { id: number; usos: number }[]).map((u) => [Number(u.id), Number(u.usos)]));
+  }
+
   return (
     <div className="mx-auto max-w-6xl">
       <header className="mb-6">
@@ -57,6 +65,7 @@ export default async function CatalogoPage(props: PageProps<"/catalogos/[catalog
           registros={(registros ?? []) as Registro[]}
           referencias={referencias}
           puedeEditar={perfil.rol === "titular"}
+          usos={usos}
         />
       )}
     </div>

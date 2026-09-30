@@ -114,3 +114,35 @@ export async function cambiarActivo(clave: string, id: number, activo: boolean) 
   if (error) throw new Error(mensajeDeError(error.code, error.message));
   revalidatePath(`/catalogos/${clave}`);
 }
+
+const FUSIONABLES = ["proveedores", "conceptos", "clasificaciones"];
+
+// Fusiona duplicados: todos los movimientos pasan al registro que se conserva.
+export async function fusionarRegistros(clave: string, conservar: number, eliminar: number[]): Promise<{ ok?: string; error?: string }> {
+  try {
+    await exigirTitular();
+  } catch {
+    return { error: "Solo el titular puede fusionar." };
+  }
+  if (!FUSIONABLES.includes(clave)) return { error: "Este catálogo no se puede fusionar." };
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("fusionar_catalogo", { p_catalogo: clave, p_conservar: conservar, p_eliminar: eliminar });
+  if (error) return { error: `No se pudo fusionar (${error.message}).` };
+  revalidatePath(`/catalogos/${clave}`);
+  revalidatePath("/transacciones", "layout");
+  return { ok: `Listo: se fusionaron ${eliminar.length + 1} registros y se actualizaron ${Number(data ?? 0).toLocaleString("es-MX")} movimientos.` };
+}
+
+export async function eliminarClasificacion(id: number): Promise<{ ok?: string; error?: string }> {
+  try {
+    await exigirTitular();
+  } catch {
+    return { error: "Solo el titular puede eliminar." };
+  }
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("eliminar_clasificacion", { p_id: id });
+  if (error) return { error: `No se pudo eliminar (${error.message}).` };
+  revalidatePath("/catalogos/clasificaciones");
+  revalidatePath("/transacciones", "layout");
+  return { ok: `Clasificación eliminada y quitada de ${Number(data ?? 0).toLocaleString("es-MX")} movimientos.` };
+}

@@ -3,9 +3,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { obtenerPerfil } from "@/lib/auth";
+import { obtenerPermisos } from "@/lib/auth";
 import { dinero } from "@/lib/formato";
-import { leerFiltros, parametrosBusqueda, POR_PAGINA, type Movimiento, type SaldoCuenta } from "@/lib/transacciones";
+import { cargarCatalogosMovimiento } from "@/lib/catalogos-movimiento";
+import {
+  leerFiltros, parametrosBusqueda, parametrosFiltro, POR_PAGINA,
+  type CuentaCorta, type Movimiento, type SaldoCuenta, type Totales,
+} from "@/lib/transacciones";
 import MovimientosVista from "./MovimientosVista";
 
 export async function generateMetadata(props: PageProps<"/transacciones/[cuenta]">): Promise<Metadata> {
@@ -20,32 +24,26 @@ export default async function CuentaPage(props: PageProps<"/transacciones/[cuent
   const cuentaId = Number(param);
   if (!Number.isInteger(cuentaId) || cuentaId <= 0) notFound();
   const filtros = leerFiltros(await props.searchParams);
+  filtros.cuentas = undefined;
 
-  const perfil = await obtenerPerfil();
+  const permisos = await obtenerPermisos();
   const supabase = await createClient();
 
-  const [cuentaR, movsR, conceptosR, proveedoresR, clasifR, cuentasR] = await Promise.all([
+  const [cuentaR, movsR, totR, folioR, catalogos, cuentasR] = await Promise.all([
     supabase.from("v_saldos_cuentas").select("*").eq("cuenta_id", cuentaId).maybeSingle(),
-    supabase.rpc("buscar_transacciones", parametrosBusqueda(cuentaId, filtros)),
-    supabase.from("conceptos").select("id, nombre, activo").order("nombre").limit(5000),
-    supabase.from("proveedores").select("id, nombre, apellido_paterno, apellido_materno, razon_social, activo").order("nombre").limit(5000),
-    supabase.from("clasificaciones").select("id, nombre, color, activo").order("nombre"),
+    supabase.rpc("buscar_movimientos", parametrosBusqueda([cuentaId], filtros, "folio")),
+    supabase.rpc("totales_movimientos", parametrosFiltro([cuentaId], filtros)),
+    supabase.from("transacciones").select("folio").eq("cuenta_id", cuentaId).order("folio", { ascending: false }).limit(1),
+    cargarCatalogosMovimiento(supabase),
     supabase.from("v_saldos_cuentas").select("cuenta_id, nombre, moneda, activa").order("nombre"),
   ]);
 
   const cuenta = cuentaR.data as SaldoCuenta | null;
   if (!cuenta) notFound();
   const movimientos = (movsR.data ?? []) as Movimiento[];
-  const total = movimientos[0]?.total ?? 0;
-
-  type Prov = { id: number; nombre: string; apellido_paterno: string | null; apellido_materno: string | null; razon_social: string | null; activo: boolean };
-  const proveedores = ((proveedoresR.data ?? []) as Prov[]).map((p) => {
-    const nombre = [p.nombre, p.apellido_paterno, p.apellido_materno].filter(Boolean).join(" ");
-    return { valor: String(p.id), etiqueta: p.razon_social || nombre, activo: p.activo };
-  });
-  const conceptos = ((conceptosR.data ?? []) as { id: number; nombre: string; activo: boolean }[]).map((c) => ({
-    valor: String(c.id), etiqueta: c.nombre, activo: c.activo,
-  }));
+  const siguienteFolio = Number(folioR.data?.[0]?.folio ?? 0) + 1;
+  const puedeEditar = permisos.puedeEditar(cuentaId);
+  const otras = ((cuentasR.data ?? []) as CuentaCorta[]).filter((c) => c.cuenta_id !== cuentaId && c.activa && permisos.puedeEditar(c.cuenta_id));
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -58,6 +56,7 @@ export default async function CuentaPage(props: PageProps<"/transacciones/[cuent
           <p className="mt-1 text-sm text-muted">
             {[cuenta.banco, cuenta.tipo_cuenta, cuenta.moneda].filter(Boolean).join(" · ")}
             {!cuenta.activa && " · cuenta inactiva"}
+            {!puedeEditar && " · solo consulta"}
           </p>
         </div>
         <div className="sm:text-right">
@@ -72,18 +71,16 @@ export default async function CuentaPage(props: PageProps<"/transacciones/[cuent
         <p className="card p-6 text-sm text-danger">No se pudieron cargar los movimientos: {movsR.error.message}</p>
       ) : (
         <MovimientosVista
-          cuenta={cuenta}
+          cuenta={{ cuenta_id: cuenta.cuenta_id, nombre: cuenta.nombre, moneda: cuenta.moneda, activa: cuenta.activa }}
           movimientos={movimientos}
-          total={Number(total)}
-          totalCargos={Number(movimientos[0]?.total_cargos ?? 0)}
-          totalAbonos={Number(movimientos[0]?.total_abonos ?? 0)}
+          total={Number(movimientos[0]?.total ?? 0)}
+          totales={(totR.data ?? []) as Totales[]}
           filtros={filtros}
           porPagina={POR_PAGINA}
-          conceptos={conceptos}
-          proveedores={proveedores}
-          clasificaciones={(clasifR.data ?? []) as { id: number; nombre: string; color: string; activo: boolean }[]}
-          cuentas={((cuentasR.data ?? []) as Pick<SaldoCuenta, "cuenta_id" | "nombre" | "moneda" | "activa">[]).filter((c) => c.cuenta_id !== cuentaId)}
-          puedeEditar={perfil.rol === "titular"}
+          siguienteFolio={siguienteFolio}
+          {...catalogos}
+          cuentas={otras}
+          puedeEditar={puedeEditar}
         />
       )}
     </div>

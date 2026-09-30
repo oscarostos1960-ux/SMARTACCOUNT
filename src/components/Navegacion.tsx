@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
-  Home, ArrowLeftRight, CalendarClock, Upload, BarChart3, Landmark, Users, Tag, Tags,
+  Home, ArrowLeftRight, FileSearch, CalendarClock, Upload, BarChart3, Landmark, Users, Tag, Tags,
   Building2, Coins, Layers, ShieldCheck, Menu, X, LogOut,
 } from "lucide-react";
 import Logo from "./Logo";
@@ -16,6 +16,7 @@ const SECCIONES: { titulo?: string; items: Item[]; soloTitular?: boolean }[] = [
     items: [
       { href: "/", texto: "Inicio", icono: Home },
       { href: "/transacciones", texto: "Transacciones", icono: ArrowLeftRight },
+      { href: "/reporte", texto: "Reporte de movimientos", icono: FileSearch },
       { href: "/pagos-programados", texto: "Pagos programados", icono: CalendarClock, proximamente: true },
       { href: "/importar", texto: "Importar estados de cuenta", icono: Upload, proximamente: true },
       { href: "/reportes", texto: "Reportes", icono: BarChart3, proximamente: true },
@@ -90,7 +91,7 @@ export default function Navegacion({ nombre, rol }: { nombre: string; rol: strin
       </div>
       <div className="border-t border-border px-5 py-4">
         <p className="truncate text-sm font-medium">{nombre}</p>
-        <p className="text-xs capitalize text-muted">{rol === "contador" ? "Contador (solo consulta)" : rol}</p>
+        <p className="text-xs capitalize text-muted">{rol === "usuario" ? "Acceso por cuenta" : rol}</p>
         <form action="/auth/salir" method="post" className="mt-3">
           <button className="btn-secondary w-full"><LogOut className="h-4 w-4" aria-hidden /> Salir</button>
         </form>

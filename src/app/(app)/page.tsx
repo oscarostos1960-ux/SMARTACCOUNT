@@ -39,7 +39,7 @@ export default async function Inicio() {
       <header className="mb-8">
         <h1 className="text-2xl font-semibold tracking-tight">Hola, {perfil.nombre.split(" ")[0]}</h1>
         <p className="mt-1 text-sm text-muted">
-          {perfil.rol === "contador" ? "Tienes acceso de consulta a la información." : "Este es el resumen de tu Smart Account."}
+          {perfil.rol === "usuario" ? "Tienes acceso a las cuentas que te asignó el titular." : "Este es el resumen de tu Smart Account."}
         </p>
       </header>
 

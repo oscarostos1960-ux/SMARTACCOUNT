@@ -9,7 +9,7 @@ export type OpcionCombo = { valor: string; etiqueta: string; detalle?: string };
 // Lista con buscador para catálogos largos (proveedores, conceptos).
 // Envía el valor elegido en un campo oculto con el nombre indicado.
 export default function Combobox({
-  nombre, opciones, valorInicial, placeholder = "Buscar…", id, invalido, descritoPor,
+  nombre, opciones, valorInicial, placeholder = "Buscar…", id, invalido, descritoPor, onCambio,
 }: {
   nombre: string;
   opciones: OpcionCombo[];
@@ -18,6 +18,7 @@ export default function Combobox({
   id?: string;
   invalido?: boolean;
   descritoPor?: string;
+  onCambio?: (valor: string) => void;
 }) {
   const auto = useId();
   const inputId = id ?? auto;
@@ -35,6 +36,7 @@ export default function Combobox({
     setValor(o?.valor ?? "");
     setTexto(o?.etiqueta ?? "");
     setAbierto(false);
+    onCambio?.(o?.valor ?? "");
   }
 
   function teclado(e: React.KeyboardEvent<HTMLInputElement>) {
