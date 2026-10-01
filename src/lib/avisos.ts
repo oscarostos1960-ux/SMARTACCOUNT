@@ -11,7 +11,7 @@ import { dinero, fecha } from "@/lib/formato";
 // por WhatsApp (plantillas aprobadas de 1msg.io) y por correo (SMTP).
 
 export type Canal = "whatsapp" | "correo";
-export type ResultadoAviso = { canal: Canal; ok: boolean; destino: string | null; mensaje: string };
+export type ResultadoAviso = { canal: Canal; ok: boolean; destino: string | null; mensaje: string; tecnico?: string };
 
 type DatosAviso = {
   id: number;
@@ -106,7 +106,7 @@ async function subirImagen(supabase: SupabaseClient, d: DatosAviso, png: Buffer)
 }
 
 // ---------- WhatsApp (1msg.io) ----------
-async function plantilla(telefono: string, nombre: string, encabezado: Record<string, unknown>, template: string) {
+export async function plantilla(telefono: string, nombre: string, encabezado: Record<string, unknown>, template: string) {
   const base = process.env.WHATSAPP_API_URL || "https://api.1msg.io";
   const url = `${base}/${process.env.WHATSAPP_INSTANCIA}/sendTemplate?token=${encodeURIComponent(process.env.WHATSAPP_TOKEN ?? "")}`;
   const cuerpo = {
@@ -125,7 +125,11 @@ async function plantilla(telefono: string, nombre: string, encabezado: Record<st
   try { json = JSON.parse(texto); } catch { /* respuesta no JSON */ }
   const ok = r.ok && json.sent !== false && !json.error;
   // Nunca se guarda la URL con el token: solo la respuesta del servicio
-  return { ok, detalle: (typeof json.error === "string" ? json.error : typeof json.message === "string" ? json.message : texto).slice(0, 300) || `HTTP ${r.status}` };
+  return {
+    ok,
+    detalle: (typeof json.error === "string" ? json.error : typeof json.message === "string" ? json.message : texto).slice(0, 300) || `HTTP ${r.status}`,
+    respuesta: `HTTP ${r.status} ${texto}`.slice(0, 500),
+  };
 }
 
 async function enviarWhatsApp(supabase: SupabaseClient, d: DatosAviso, imagenUrl: string): Promise<ResultadoAviso> {
@@ -133,19 +137,22 @@ async function enviarWhatsApp(supabase: SupabaseClient, d: DatosAviso, imagenUrl
   if (!whatsappConfigurado()) return { canal: "whatsapp", ok: false, destino: null, mensaje: "WhatsApp no está configurado." };
   if (!telefono) return { canal: "whatsapp", ok: false, destino: d.celular, mensaje: "El proveedor no tiene un celular de 10 dígitos." };
   const imagen = await plantilla(telefono, d.proveedor, { type: "image", image: { link: imagenUrl } }, "confirmacionpagosacc");
-  if (!imagen.ok) return { canal: "whatsapp", ok: false, destino: telefono, mensaje: `WhatsApp rechazó el aviso: ${imagen.detalle}` };
+  if (!imagen.ok) return { canal: "whatsapp", ok: false, destino: telefono, mensaje: `WhatsApp rechazó el aviso: ${imagen.detalle}`, tecnico: `imagen: ${imagen.respuesta}` };
   let enviados = 0;
   const fallas: string[] = [];
+  const tecnico = [`imagen: ${imagen.respuesta}`];
   for (const doc of d.documentos.slice(0, 5)) {
     const { data } = await supabase.storage.from("documentos").createSignedUrl(doc.ruta, CADUCIDAD_LIGAS);
     if (!data) { fallas.push(doc.nombre); continue; }
     const r = await plantilla(telefono, d.proveedor, { type: "document", document: { link: data.signedUrl, filename: doc.nombre } }, "adjuntopagoacc");
+    tecnico.push(`documento: ${r.respuesta}`);
     if (r.ok) enviados++; else fallas.push(`${doc.nombre} (${r.detalle})`);
   }
   const extra = d.documentos.length ? ` y ${enviados} de ${Math.min(d.documentos.length, 5)} comprobante(s)` : " (sin comprobante adjunto)";
   return {
     canal: "whatsapp", ok: fallas.length === 0, destino: telefono,
     mensaje: `Aviso enviado${extra}.${fallas.length ? ` No se pudieron enviar: ${fallas.join(", ")}.` : ""}`,
+    tecnico: tecnico.join(" | "),
   };
 }
 
@@ -205,7 +212,7 @@ export async function enviarAvisoMovimiento(supabase: SupabaseClient, movimiento
   }
 
   await supabase.from("avisos").insert(resultados.map((r) => ({
-    transaccion_id: movimientoId, canal: r.canal, destino: r.destino, estado: r.ok ? "enviado" : "error", detalle: r.mensaje,
+    transaccion_id: movimientoId, canal: r.canal, destino: r.destino, estado: r.ok ? "enviado" : "error", detalle: r.tecnico ? `${r.mensaje} — ${r.tecnico}`.slice(0, 1500) : r.mensaje,
   })));
   const cambios: Record<string, string> = {};
   for (const r of resultados) cambios[r.canal === "whatsapp" ? "aviso_whatsapp" : "aviso_correo"] = r.ok ? "enviado" : "pendiente";
