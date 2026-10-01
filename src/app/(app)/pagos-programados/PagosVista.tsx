@@ -174,6 +174,9 @@ export default function PagosVista({
             inicial={inicial}
             vencimientoId={v.id}
             titulo="Registrar pago"
+            avisoPrevio={plan && (plan.avisar_whatsapp || plan.avisar_correo)
+              ? `Al guardar se enviará el aviso de pago por ${[plan.avisar_whatsapp && "WhatsApp", plan.avisar_correo && "correo"].filter(Boolean).join(" y ")} a ${v.proveedor ?? "el proveedor"}, con los documentos que adjuntes.`
+              : undefined}
             aviso={`Pago programado que vence el ${fecha(v.fecha)}. Al guardar, se registra el movimiento y la fecha queda como pagada. Revisa y cambia lo que necesites.`}
             onCerrar={() => setAbierto(null)}
           />

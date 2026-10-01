@@ -6,10 +6,12 @@ import Combobox, { type OpcionCombo } from "@/components/Combobox";
 import { fecha as fmtFecha, hoyCDMX } from "@/lib/formato";
 import type { CuentaCorta, Movimiento } from "@/lib/transacciones";
 import {
-  eliminarMovimiento, guardarMovimiento, guardarTransferencia, siguienteFolioCuenta, ultimoMovimientoProveedor,
+  eliminarMovimiento, enviarAviso, guardarMovimiento, guardarTransferencia, siguienteFolioCuenta, ultimoMovimientoProveedor,
   type Plantilla, type ResultadoMovimiento,
 } from "@/app/(app)/transacciones/actions";
 import Documentos, { subirArchivos } from "./Documentos";
+import AvisosMovimiento, { ListaResultados } from "./Avisos";
+import type { ResultadoAviso } from "@/lib/avisos";
 import type { Clasif } from "./TablaMovimientos";
 
 export type Opcion = OpcionCombo & { activo: boolean };
@@ -52,7 +54,7 @@ export type Inicial = Plantilla & { proveedor_id: string };
 
 export function DialogoMovimiento({
   cuenta, movimiento, siguienteFolio, conceptos, proveedores, clasificaciones, puedeEditar, onCerrar,
-  cuentas, inicial, aviso, titulo: tituloFijo, vencimientoId,
+  cuentas, inicial, aviso, titulo: tituloFijo, vencimientoId, avisoPrevio,
 }: {
   cuenta: CuentaCorta;
   movimiento: Movimiento | null;
@@ -67,6 +69,7 @@ export function DialogoMovimiento({
   aviso?: string;
   titulo?: string;
   vencimientoId?: number;
+  avisoPrevio?: string;           // texto que explica qué avisos se enviarán al guardar
 }) {
   const [cuentaSel, setCuentaSel] = useState(cuenta);
   const [folio, setFolio] = useState({ valor: siguienteFolio, version: 0 });
@@ -80,24 +83,40 @@ export function DialogoMovimiento({
   const [archivos, setArchivos] = useState<File[]>([]);
   const [subiendo, setSubiendo] = useState(false);
   const [errorArchivos, setErrorArchivos] = useState<string>();
+  const [enviandoAviso, setEnviandoAviso] = useState(false);
+  const [resultadoAvisos, setResultadoAvisos] = useState<ResultadoAviso[]>();
+  const terminado = !!(errorArchivos || resultadoAvisos);
   const dialogo = useRef<HTMLDialogElement>(null);
   const cerrar = () => dialogo.current?.close();
 
-  // Al guardar un movimiento nuevo, se suben los archivos elegidos y se cierra.
+  // Al guardar un movimiento nuevo: se suben los archivos elegidos, se envían los avisos
+  // (si el pago programado los tiene activados) y se cierra.
   useEffect(() => {
     if (!estado.ok) return;
-    if (!archivos.length || !estado.id) {
+    if ((!archivos.length && !estado.avisar) || !estado.id) {
       dialogo.current?.close();
       return;
     }
     let vivo = true;
     (async () => {
-      setSubiendo(true);
-      const errores = await subirArchivos(cuentaSel.cuenta_id, estado.id!, archivos);
-      if (!vivo) return;
-      setSubiendo(false);
+      let errores: string[] = [];
+      if (archivos.length) {
+        setSubiendo(true);
+        errores = await subirArchivos(cuentaSel.cuenta_id, estado.id!, archivos);
+        if (!vivo) return;
+        setSubiendo(false);
+      }
+      let avisos: ResultadoAviso[] = [];
+      if (estado.avisar?.length) {
+        setEnviandoAviso(true);
+        const r = await enviarAviso(estado.id!, estado.avisar);
+        if (!vivo) return;
+        setEnviandoAviso(false);
+        avisos = r.resultados ?? [{ canal: estado.avisar[0], ok: false, destino: null, mensaje: r.error ?? "No se pudo enviar el aviso." }];
+      }
       if (errores.length) setErrorArchivos(`El movimiento se guardó, pero: ${errores.join(" ")}`);
-      else dialogo.current?.close();
+      if (avisos.length) setResultadoAvisos(avisos);
+      else if (!errores.length) dialogo.current?.close();
     })();
     return () => { vivo = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -148,7 +167,7 @@ export function DialogoMovimiento({
   return (
     <Dialogo titulo={titulo} refDialogo={dialogo} onCerrar={onCerrar}>
       <form action={formAction}>
-        <fieldset disabled={soloLectura || subiendo} className="grid max-h-[68vh] grid-cols-1 gap-4 overflow-y-auto px-5 py-4 sm:grid-cols-6">
+        <fieldset disabled={soloLectura || subiendo || enviandoAviso || terminado} className="grid max-h-[68vh] grid-cols-1 gap-4 overflow-y-auto px-5 py-4 sm:grid-cols-6">
           {m?.transferencia_id && (
             <p className="rounded-lg bg-primary-soft px-3 py-2 text-sm text-primary sm:col-span-6">
               Este movimiento es parte de una transferencia. Si lo eliminas, también se elimina el movimiento de la otra cuenta.
@@ -249,7 +268,10 @@ export function DialogoMovimiento({
           </div>
 
           {m ? (
-            <Documentos cuentaId={cuenta.cuenta_id} movimientoId={m.id} puedeEditar={puedeEditar} />
+            <>
+              <Documentos cuentaId={cuenta.cuenta_id} movimientoId={m.id} puedeEditar={puedeEditar} />
+              {m.proveedor_id && <AvisosMovimiento movimientoId={m.id} puedeEditar={puedeEditar} />}
+            </>
           ) : (
             <div
               className="sm:col-span-6"
@@ -264,6 +286,12 @@ export function DialogoMovimiento({
           )}
         </fieldset>
 
+        {avisoPrevio && !m && !terminado && (
+          <p className="mx-5 mb-3 rounded-lg bg-primary-soft px-3 py-2 text-sm text-primary">{enviandoAviso ? "Enviando aviso al proveedor…" : avisoPrevio}</p>
+        )}
+        {resultadoAvisos && (
+          <div className="mx-5 mb-3"><ListaResultados resultados={resultadoAvisos} /></div>
+        )}
         {(estado.error || errorBorrar || errorArchivos) && (
           <p role="alert" className="mx-5 mb-3 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{errorArchivos ?? errorBorrar ?? estado.error}</p>
         )}
@@ -283,10 +311,10 @@ export function DialogoMovimiento({
             ))}
           </div>
           <div className="flex gap-2">
-            <button type="button" className="btn-secondary flex-1 sm:flex-none" onClick={cerrar}>{soloLectura || errorArchivos ? "Cerrar" : "Cancelar"}</button>
-            {!soloLectura && !errorArchivos && (
-              <button type="submit" className="btn-primary flex-1 sm:flex-none" disabled={guardando || subiendo}>
-                {subiendo ? "Subiendo documentos…" : guardando ? "Guardando…" : "Guardar"}
+            <button type="button" className="btn-secondary flex-1 sm:flex-none" onClick={cerrar}>{soloLectura || terminado ? "Cerrar" : "Cancelar"}</button>
+            {!soloLectura && !terminado && (
+              <button type="submit" className="btn-primary flex-1 sm:flex-none" disabled={guardando || subiendo || enviandoAviso}>
+                {enviandoAviso ? "Enviando aviso…" : subiendo ? "Subiendo documentos…" : guardando ? "Guardando…" : "Guardar"}
               </button>
             )}
           </div>

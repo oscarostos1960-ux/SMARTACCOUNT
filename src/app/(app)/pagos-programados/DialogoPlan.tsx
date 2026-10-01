@@ -170,7 +170,7 @@ export default function DialogoPlan({
               <label className="flex items-center gap-2"><input type="checkbox" name="avisar_whatsapp" defaultChecked={p?.avisar_whatsapp} /> WhatsApp</label>
               <label className="flex items-center gap-2"><input type="checkbox" name="avisar_correo" defaultChecked={p?.avisar_correo} /> Correo</label>
             </div>
-            <p className="mt-1 text-xs text-muted">Los avisos se enviarán cuando se active esa función; por ahora solo queda anotado.</p>
+            <p className="mt-1 text-xs text-muted">Se envían solos al registrar el pago: la imagen con los datos del pago y los documentos adjuntos.</p>
           </fieldset>
         </fieldset>
 

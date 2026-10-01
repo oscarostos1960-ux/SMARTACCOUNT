@@ -3,10 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { obtenerPermisos } from "@/lib/auth";
+import { enviarAvisoMovimiento, type Canal, type ResultadoAviso } from "@/lib/avisos";
 
 export type ResultadoMovimiento = {
   ok?: boolean;
   id?: number;                 // id del movimiento guardado (para subir documentos después)
+  avisar?: Canal[];            // avisos que se envían en cuanto terminen de subirse los documentos
   error?: string;
   errores?: Record<string, string>;
   valores?: Record<string, string | string[]>;
@@ -119,7 +121,17 @@ export async function guardarMovimiento(
 
   // Pago de un vencimiento programado: queda marcado como pagado con este movimiento.
   const vencimientoId = idOpcional(fd, "vencimiento_id");
+  const avisar: Canal[] = [];
   if (!id && vencimientoId && movimientoId) {
+    const { data: v } = await supabase.from("v_vencimientos").select("avisar_whatsapp, avisar_correo").eq("id", vencimientoId).maybeSingle();
+    if (v?.avisar_whatsapp) avisar.push("whatsapp");
+    if (v?.avisar_correo) avisar.push("correo");
+    if (avisar.length) {
+      await supabase.from("transacciones").update({
+        aviso_whatsapp: v?.avisar_whatsapp ? "pendiente" : null,
+        aviso_correo: v?.avisar_correo ? "pendiente" : null,
+      }).eq("id", movimientoId);
+    }
     const { error } = await supabase.from("vencimientos")
       .update({ estado: "pagado", transaccion_id: movimientoId, pagado_en: new Date().toISOString() })
       .eq("id", vencimientoId);
@@ -127,7 +139,7 @@ export async function guardarMovimiento(
     if (error) console.error("No se pudo marcar el vencimiento como pagado", vencimientoId, error.message);
   }
   refrescar();
-  return { ok: true, id: movimientoId ?? undefined };
+  return { ok: true, id: movimientoId ?? undefined, avisar: avisar.length ? avisar : undefined };
 }
 
 export async function guardarTransferencia(
@@ -288,4 +300,27 @@ export async function siguienteFolioCuenta(cuentaId: number): Promise<number> {
   const supabase = await createClient();
   const { data } = await supabase.from("transacciones").select("folio").eq("cuenta_id", cuentaId).order("folio", { ascending: false }).limit(1);
   return Number(data?.[0]?.folio ?? 0) + 1;
+}
+
+// ---------- Avisos al proveedor (WhatsApp y correo) ----------
+export type Aviso = { id: number; canal: Canal; destino: string | null; estado: "enviado" | "error"; detalle: string | null; created_at: string };
+
+export async function enviarAviso(movimientoId: number, canales: Canal[]): Promise<{ resultados?: ResultadoAviso[]; error?: string }> {
+  const lista = canales.filter((c): c is Canal => c === "whatsapp" || c === "correo");
+  if (!lista.length) return { error: "Elige WhatsApp o correo." };
+  const supabase = await createClient();
+  const { data: mov } = await supabase.from("transacciones").select("cuenta_id").eq("id", movimientoId).maybeSingle();
+  if (!mov) return { error: "El movimiento ya no existe." };
+  const permisos = await obtenerPermisos();
+  if (!permisos.puedeEditar(Number(mov.cuenta_id))) return { error: "No tienes permiso para enviar avisos de esta cuenta." };
+  const resultados = await enviarAvisoMovimiento(supabase, movimientoId, lista);
+  refrescar();
+  return { resultados };
+}
+
+export async function listarAvisos(movimientoId: number): Promise<Aviso[]> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("avisos").select("id, canal, destino, estado, detalle, created_at")
+    .eq("transaccion_id", movimientoId).order("created_at", { ascending: false }).limit(20);
+  return (data ?? []) as Aviso[];
 }
