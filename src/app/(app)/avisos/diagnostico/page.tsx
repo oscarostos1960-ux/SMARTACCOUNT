@@ -7,6 +7,52 @@ export const metadata: Metadata = { title: "Diagnóstico de WhatsApp" };
 export const dynamic = "force-dynamic";
 
 // Consulta 1msg.io desde el servidor (el token nunca se muestra).
+async function consultarJson(ruta: string): Promise<{ status: number; json: unknown; texto: string }> {
+  const token = process.env.WHATSAPP_TOKEN ?? "";
+  const url = `${process.env.WHATSAPP_API_URL || "https://api.1msg.io"}/${process.env.WHATSAPP_INSTANCIA}/${ruta}${ruta.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`;
+  try {
+    const r = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(15000) });
+    const texto = (await r.text()).split(token).join("***");
+    let json: unknown = null;
+    try { json = JSON.parse(texto); } catch { /* no JSON */ }
+    return { status: r.status, json, texto };
+  } catch (e) {
+    return { status: 0, json: null, texto: `Sin respuesta: ${e instanceof Error ? e.message : "error"}` };
+  }
+}
+
+type Componente = { type?: string; format?: string; text?: string };
+type Plantilla = { name?: string; status?: string; language?: string; category?: string; components?: Componente[] };
+
+// Resumen legible: nombre, estado, idioma, encabezado y texto
+async function resumenPlantillas() {
+  const r = await consultarJson("templates");
+  const lista = (Array.isArray(r.json) ? r.json : (r.json as { templates?: unknown[] } | null)?.templates) as Plantilla[] | undefined;
+  if (!lista) return `HTTP ${r.status}\n${r.texto.slice(0, 3000)}`;
+  const nuestras = ["confirmacionpagosacc", "adjuntopagoacc"];
+  return lista
+    .sort((a, b) => Number(nuestras.includes(b.name ?? "")) - Number(nuestras.includes(a.name ?? "")))
+    .map((t) => {
+      const enc = t.components?.find((c) => c.type === "HEADER");
+      const cuerpo = t.components?.find((c) => c.type === "BODY");
+      return `${nuestras.includes(t.name ?? "") ? "★ " : "  "}${t.name} · ${t.status} · idioma ${t.language} · ${t.category ?? ""}` +
+        `\n    encabezado: ${enc?.format ?? "—"} · texto: ${(cuerpo?.text ?? "").replace(/\n/g, " ").slice(0, 120)}`;
+    }).join("\n");
+}
+
+// Últimos mensajes: hora, destino, tipo, estado
+async function resumenMensajes() {
+  const r = await consultarJson("messages?limit=30&last=true");
+  const lista = (Array.isArray(r.json) ? r.json : (r.json as { messages?: unknown[] } | null)?.messages) as Record<string, unknown>[] | undefined;
+  if (!lista) return `HTTP ${r.status}\n${r.texto.slice(0, 3000)}`;
+  if (!lista.length) return "Sin mensajes.";
+  return lista.slice(-30).reverse().map((m) => {
+    const hora = typeof m.time === "number" ? new Date(m.time * 1000).toLocaleString("es-MX", { timeZone: "America/Mexico_City" }) : String(m.time ?? "");
+    const estado = [m.status, m.ack, m.error, m.errors].filter((x) => x != null && x !== "").map((x) => (typeof x === "string" ? x : JSON.stringify(x))).join(" ");
+    return `${hora} · ${m.fromMe ? "enviado a" : "recibido de"} ${m.chatId ?? m.chat_id ?? ""} · ${m.type ?? ""} ${estado ? `· ${estado}` : ""}\n    ${String(m.body ?? m.caption ?? "").replace(/\s+/g, " ").slice(0, 140)}`;
+  }).join("\n");
+}
+
 async function consultar(ruta: string) {
   const token = process.env.WHATSAPP_TOKEN ?? "";
   const url = `${process.env.WHATSAPP_API_URL || "https://api.1msg.io"}/${process.env.WHATSAPP_INSTANCIA}/${ruta}${ruta.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`;
@@ -24,7 +70,7 @@ export default async function DiagnosticoPage() {
   const perfil = await obtenerPerfil();
   if (perfil.rol !== "titular") notFound();
   const [status, me, templates, messages] = await Promise.all([
-    consultar("status"), consultar("me"), consultar("templates"), consultar("messages?limit=20&last=true"),
+    consultar("status"), consultar("me"), resumenPlantillas(), resumenMensajes(),
   ]);
   const bloques = [
     { titulo: "Estado de la instancia (/status)", texto: status },

@@ -35,13 +35,14 @@ export function correoConfigurado() {
   return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
 }
 
-// Celular de México en el formato que usaba el sistema anterior: 521 + 10 dígitos
-export function telefonoWhatsApp(celular: string | null) {
+// Celular de México: 521 + 10 dígitos (así entrega esta instancia de 1msg; WHATSAPP_FORMATO=52 para cambiarlo).
+export function telefonoWhatsApp(celular: string | null, formato = process.env.WHATSAPP_FORMATO === "52" ? "52" : "521") {
   const d = (celular ?? "").replace(/\D/g, "");
-  if (d.length === 10) return `521${d}`;
-  if (d.length === 12 && d.startsWith("52")) return `521${d.slice(2)}`;
-  if (d.length === 13 && d.startsWith("521")) return d;
-  return null;
+  let diez: string | null = null;
+  if (d.length === 10) diez = d;
+  else if (d.length === 12 && d.startsWith("52")) diez = d.slice(2);
+  else if (d.length === 13 && d.startsWith("521")) diez = d.slice(3);
+  return diez ? `${formato}${diez}` : null;
 }
 const correoValido = (c: string | null) => !!c && /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(c.trim());
 
@@ -113,7 +114,7 @@ export async function plantilla(telefono: string, nombre: string, encabezado: Re
     phone: telefono,
     template,
     namespace: process.env.WHATSAPP_NAMESPACE || "f8e2e036_389c_4874_96a1_4d7ebd27f86e",
-    language: { code: "es_mx", policy: "deterministic" },
+    language: { code: process.env.WHATSAPP_IDIOMA || "es_MX", policy: "deterministic" },   // como está aprobada la plantilla
     params: [
       { type: "header", parameters: [encabezado] },
       { type: "body", parameters: [{ type: "text", text: nombre }] },

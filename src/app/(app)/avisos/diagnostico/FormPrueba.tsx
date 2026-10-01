@@ -16,9 +16,9 @@ export default function FormPrueba() {
       </div>
       <div>
         <label htmlFor="d-formato" className="label">Formato</label>
-        <select id="d-formato" name="formato" className="input" defaultValue="52">
+        <select id="d-formato" name="formato" className="input" defaultValue="521">
           <option value="52">52 + 10 dígitos</option>
-          <option value="521">521 + 10 dígitos</option>
+          <option value="521">521 + 10 dígitos (el que usa la instancia)</option>
         </select>
       </div>
       <input type="hidden" name="imagen" value={IMAGEN_PRUEBA} />
