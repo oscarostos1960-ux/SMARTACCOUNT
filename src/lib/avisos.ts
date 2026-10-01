@@ -28,6 +28,10 @@ type DatosAviso = {
 
 const CADUCIDAD_LIGAS = 60 * 60 * 24 * 7;   // 7 días: tiempo para que WhatsApp descargue los archivos
 
+// Plantillas aprobadas por Meta (se pueden cambiar en Vercel sin tocar el código)
+export const PLANTILLA_IMAGEN = () => process.env.WHATSAPP_PLANTILLA_IMAGEN || "confirmacionpagosacc";
+export const PLANTILLA_DOCUMENTO = () => process.env.WHATSAPP_PLANTILLA_DOCUMENTO || "adjuntopagoacc";
+
 export function whatsappConfigurado() {
   return !!(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_INSTANCIA);
 }
@@ -137,7 +141,7 @@ async function enviarWhatsApp(supabase: SupabaseClient, d: DatosAviso, imagenUrl
   const telefono = telefonoWhatsApp(d.celular);
   if (!whatsappConfigurado()) return { canal: "whatsapp", ok: false, destino: null, mensaje: "WhatsApp no está configurado." };
   if (!telefono) return { canal: "whatsapp", ok: false, destino: d.celular, mensaje: "El proveedor no tiene un celular de 10 dígitos." };
-  const imagen = await plantilla(telefono, d.proveedor, { type: "image", image: { link: imagenUrl } }, "confirmacionpagosacc");
+  const imagen = await plantilla(telefono, d.proveedor, { type: "image", image: { link: imagenUrl } }, PLANTILLA_IMAGEN());
   if (!imagen.ok) return { canal: "whatsapp", ok: false, destino: telefono, mensaje: `WhatsApp rechazó el aviso: ${imagen.detalle}`, tecnico: `imagen: ${imagen.respuesta}` };
   let enviados = 0;
   const fallas: string[] = [];
@@ -145,7 +149,7 @@ async function enviarWhatsApp(supabase: SupabaseClient, d: DatosAviso, imagenUrl
   for (const doc of d.documentos.slice(0, 5)) {
     const { data } = await supabase.storage.from("documentos").createSignedUrl(doc.ruta, CADUCIDAD_LIGAS);
     if (!data) { fallas.push(doc.nombre); continue; }
-    const r = await plantilla(telefono, d.proveedor, { type: "document", document: { link: data.signedUrl, filename: doc.nombre } }, "adjuntopagoacc");
+    const r = await plantilla(telefono, d.proveedor, { type: "document", document: { link: data.signedUrl, filename: doc.nombre } }, PLANTILLA_DOCUMENTO());
     tecnico.push(`documento: ${r.respuesta}`);
     if (r.ok) enviados++; else fallas.push(`${doc.nombre} (${r.detalle})`);
   }
