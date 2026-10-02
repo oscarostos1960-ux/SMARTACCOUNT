@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { obtenerPermisos } from "@/lib/auth";
-import { leerEstadoConIA } from "@/lib/importador/ia";
+import { leerArchivo } from "@/lib/importador/leer";
 import { armarFilas, ocultarTarjetas, type Existente, type Historico } from "@/lib/importador/analisis";
 import { esquemaEstado, type Analisis, type EstadoIA } from "@/lib/importador/esquema";
 
@@ -63,52 +63,13 @@ async function construirAnalisis(supabase: Supa, imp: {
 // 1) Lee el archivo ya subido al bucket "estados" con la IA y regresa la vista previa.
 export async function analizarArchivo(ruta: string, nombre: string, tipo: "pdf" | "xml", huella: string | null): Promise<{ analisis?: Analisis; error?: string }> {
   const permisos = await obtenerPermisos();
-  if (!permisos.algunaEditable) return { error: "No tienes permiso para importar movimientos." };
-  if (!ruta.startsWith(`${permisos.perfil.id}/`) || (tipo !== "pdf" && tipo !== "xml")) return { error: "Archivo no válido." };
   const supabase = await createClient();
-
-  const { data: imp, error: e1 } = await supabase.from("importaciones").insert({
-    archivo_nombre: nombre.slice(0, 200), archivo_ruta: ruta, archivo_tipo: tipo, archivo_huella: huella, estado: "leyendo",
-  }).select("id").single();
-  if (e1 || !imp) return { error: `No se pudo registrar el archivo (${e1?.message ?? "sin respuesta"}).` };
-  const id = Number(imp.id);
-
-  const { data: blob, error: e2 } = await supabase.storage.from("estados").download(ruta);
-  if (e2 || !blob) {
-    await supabase.from("importaciones").update({ estado: "error", error: "No se pudo leer el archivo subido." }).eq("id", id);
-    return { error: "No se pudo leer el archivo subido." };
-  }
-
-  let datos: EstadoIA;
-  let modelo: string;
-  try {
-    ({ datos, modelo } = await leerEstadoConIA(Buffer.from(await blob.arrayBuffer()), tipo, nombre));
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "error desconocido";
-    await supabase.from("importaciones").update({ estado: "error", error: msg.slice(0, 1000) }).eq("id", id);
-    return { error: `La IA no pudo leer el estado de cuenta (${msg.slice(0, 200)}).` };
-  }
-
-  // Cuenta: por los últimos 4 dígitos (de la cuenta, tarjeta o CLABE) entre las cuentas que puede capturar
-  const term = [datos.terminacion, datos.terminacion_clabe].map((t) => (t ?? "").replace(/\D/g, "").slice(-4)).filter((t) => t.length === 4);
-  let cuentaId: number | null = null;
-  if (term.length) {
-    const { data: cs } = await supabase.from("cuentas").select("id").in("terminacion", term).eq("activa", true);
-    cuentaId = (cs ?? []).map((c) => Number(c.id)).find((c) => permisos.puedeEditar(c)) ?? null;
-  }
-
-  await supabase.from("importaciones").update({
-    estado: "leido", datos, modelo, cuenta_id: cuentaId, banco: datos.banco?.slice(0, 100),
-    terminacion: term[0] ?? null,
-    periodo_inicio: /^\d{4}-\d{2}-\d{2}$/.test(datos.periodo_inicio ?? "") ? datos.periodo_inicio : null,
-    periodo_fin: /^\d{4}-\d{2}-\d{2}$/.test(datos.periodo_fin ?? "") ? datos.periodo_fin : null,
-    saldo_inicial: datos.saldo_inicial, saldo_final: datos.saldo_final,
-  }).eq("id", id);
+  const r = await leerArchivo(supabase, permisos, ruta, nombre, tipo, huella);
   revalidatePath("/importar");
-
+  if ("error" in r) return { error: r.error };
   const analisis = await construirAnalisis(supabase, {
-    id, archivo_nombre: nombre, archivo_tipo: tipo, estado: "leido", datos, archivo_huella: huella,
-  }, cuentaId, cuentaId !== null);
+    id: r.id, archivo_nombre: nombre, archivo_tipo: tipo, estado: "leido", datos: r.datos, archivo_huella: huella,
+  }, r.cuentaId, r.cuentaId !== null);
   return { analisis };
 }
 

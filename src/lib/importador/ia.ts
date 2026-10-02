@@ -33,6 +33,8 @@ function limpiarXml(texto: string) {
 export async function leerEstadoConIA(archivo: Buffer, tipo: "pdf" | "xml", nombre: string): Promise<{ datos: EstadoIA; modelo: string }> {
   // Pruebas locales: respuestas guardadas en una carpeta (sin llamar a la IA)
   if (process.env.IMPORTADOR_SIMULADO) {
+    const espera = Number(process.env.IMPORTADOR_SIMULADO_ESPERA) || 0;
+    if (espera) await new Promise((r) => setTimeout(r, espera));
     const json = await readFile(join(process.env.IMPORTADOR_SIMULADO, `${nombre}.json`), "utf8");
     return { datos: esquemaEstado.parse(JSON.parse(json)), modelo: "simulado" };
   }

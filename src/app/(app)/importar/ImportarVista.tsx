@@ -11,7 +11,7 @@ import type { Opcion } from "@/components/movimientos/DialogoMovimiento";
 import type { Clasif } from "@/components/movimientos/TablaMovimientos";
 import { createClient } from "@/lib/supabase/client";
 import { dinero, fecha } from "@/lib/formato";
-import type { Analisis, FilaImportacion } from "@/lib/importador/esquema";
+import type { Analisis, FilaImportacion, ResumenLectura } from "@/lib/importador/esquema";
 import { cuadrar } from "@/lib/importador/analisis";
 import type { CuentaCorta } from "@/lib/transacciones";
 import { abrirImportacion, analizarArchivo, descartarImportacion, importarMovimientos } from "./actions";
@@ -22,8 +22,14 @@ export type ImportacionResumen = {
 };
 
 type Fila = FilaImportacion & { incluir: boolean };
+type ItemLote = {
+  clave: string; nombre: string; archivo: File;
+  estado: "esperando" | "subiendo" | "leyendo" | "listo" | "error" | "importado" | "descartado";
+  error?: string; resumen?: ResumenLectura; importados?: number;
+};
 type Fase =
   | { tipo: "inicio" }
+  | { tipo: "lote" }
   | { tipo: "trabajando"; mensaje: string }
   | { tipo: "vista"; analisis: Analisis }
   | { tipo: "listo"; cuenta: CuentaCorta; importados: number };
@@ -61,6 +67,67 @@ export default function ImportarVista({ usuarioId, cuentas, historial, conceptos
   const [importando, startImportar] = useTransition();
   const entrada = useRef<HTMLInputElement>(null);
   const nombreCuenta = useMemo(() => new Map(cuentas.map((c) => [c.cuenta_id, c])), [cuentas]);
+  const [lote, setLote] = useState<ItemLote[] | null>(null);
+  const [cuentaLote, setCuentaLote] = useState<number | null>(null);
+  const [actual, setActual] = useState<string | null>(null);   // archivo del lote que se está revisando
+  const cambiarItem = (clave: string, c: Partial<ItemLote>) => setLote((l) => l && l.map((x) => (x.clave === clave ? { ...x, ...c } : x)));
+
+  const extension = (n: string) => (n.toLowerCase().endsWith(".xml") ? "xml" : n.toLowerCase().endsWith(".pdf") ? "pdf" : null);
+
+  // Varios archivos: se suben y se leen de 4 en 4 al mismo tiempo
+  async function procesarVarios(archivos: File[]) {
+    setError(undefined);
+    const validos = archivos.filter((a) => extension(a.name) && a.size <= 32 * 1024 * 1024);
+    if (validos.length < archivos.length) setError(`Se omitieron ${archivos.length - validos.length} archivo(s): solo PDF o XML de hasta 32 MB.`);
+    if (!validos.length) return;
+    const items: ItemLote[] = validos.map((a, i) => ({ clave: `${Date.now()}-${i}`, nombre: a.name, archivo: a, estado: "esperando" }));
+    setLote(items);
+    setCuentaLote(null);
+    setFase({ tipo: "lote" });
+    let siguiente = 0;
+    const trabajador = async () => {
+      while (siguiente < items.length) {
+        const it = items[siguiente++];
+        await leerUno(it);
+      }
+    };
+    await Promise.all([trabajador(), trabajador(), trabajador(), trabajador()]);
+    router.refresh();
+  }
+
+  async function leerUno(it: ItemLote) {
+    const ext = extension(it.nombre)!;
+    cambiarItem(it.clave, { estado: "subiendo" });
+    const huella = await huellaArchivo(it.archivo);
+    const ruta = `${usuarioId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const { error: e } = await createClient().storage.from("estados").upload(ruta, it.archivo, {
+      contentType: ext === "pdf" ? "application/pdf" : "text/xml", upsert: false,
+    });
+    if (e) { cambiarItem(it.clave, { estado: "error", error: `No se pudo subir (${e.message}).` }); return; }
+    cambiarItem(it.clave, { estado: "leyendo" });
+    try {
+      const resp = await fetch("/importar/leer", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ruta, nombre: it.nombre, tipo: ext, huella }),
+      });
+      const j = await resp.json().catch(() => ({ error: resp.status === 504 ? "La lectura tardó demasiado." : `Error del servidor (${resp.status}).` }));
+      if (j.resumen) {
+        cambiarItem(it.clave, { estado: "listo", resumen: j.resumen });
+        setCuentaLote((c) => c ?? j.resumen.cuentaId ?? null);
+      } else cambiarItem(it.clave, { estado: "error", error: j.error ?? "No se pudo leer." });
+    } catch {
+      cambiarItem(it.clave, { estado: "error", error: "Se perdió la conexión mientras se leía." });
+    }
+  }
+
+  // Abre la vista previa de un archivo del lote, ya con la cuenta elegida
+  async function revisarDelLote(it: ItemLote) {
+    if (!it.resumen) return;
+    setActual(it.clave);
+    await reabrir(it.resumen.id, cuentaLote ?? undefined);
+  }
+  const pendientesLote = (lote ?? []).filter((x) => x.estado === "listo")
+    .sort((a, b) => (a.resumen?.periodo_inicio ?? "").localeCompare(b.resumen?.periodo_inicio ?? ""));
 
   function mostrar(a: Analisis, previas?: Fila[]) {
     const antes = new Map((previas ?? []).map((f) => [f.indice, f]));
@@ -96,13 +163,18 @@ export default function ImportarVista({ usuarioId, cuentas, historial, conceptos
     router.refresh();
   }
 
-  async function reabrir(id: number, cuentaId?: number | null) {
+  async function reabrir(id: number, cuentaId?: number | null, conservar = false) {
     setError(undefined);
     setFase({ tipo: "trabajando", mensaje: cuentaId === undefined ? "Abriendo…" : "Revisando duplicados en la cuenta…" });
-    const previas = cuentaId === undefined ? undefined : filas;
+    const previas = conservar ? filas : undefined;
     const r = await abrirImportacion(id, cuentaId);
-    if (r.error || !r.analisis) { setError(r.error ?? "No se pudo abrir."); setFase({ tipo: "inicio" }); return; }
+    if (r.error || !r.analisis) { setError(r.error ?? "No se pudo abrir."); setFase({ tipo: lote ? "lote" : "inicio" }); return; }
     mostrar(r.analisis, previas);
+  }
+
+  function elegir(archivos: File[]) {
+    if (archivos.length === 1) { setLote(null); procesar(archivos[0]); }
+    else if (archivos.length > 1) procesarVarios(archivos);
   }
 
   const cambiar = (i: number, cambios: Partial<Fila>) => setFilas((fs) => fs.map((f) => (f.indice === i ? { ...f, ...cambios } : f)));
@@ -121,10 +193,20 @@ export default function ImportarVista({ usuarioId, cuentas, historial, conceptos
       <div className="card flex flex-col items-center gap-3 p-10 text-center">
         <CheckCircle2 className="h-10 w-10 text-ok" aria-hidden />
         <p className="text-lg font-semibold">Se importaron {fase.importados} movimientos a {fase.cuenta.nombre}</p>
-        <div className="flex flex-wrap justify-center gap-2">
-          <Link href={`/transacciones/${fase.cuenta.cuenta_id}`} className="btn-primary">Ver la cuenta</Link>
-          <button className="btn-secondary" onClick={() => setFase({ tipo: "inicio" })}>Importar otro</button>
-        </div>
+        {lote && pendientesLote.length > 0 ? (
+          <div className="flex flex-wrap justify-center gap-2">
+            <button className="btn-primary" onClick={() => revisarDelLote(pendientesLote[0])}>
+              Seguir con el siguiente ({pendientesLote[0].resumen?.periodo_inicio ? fecha(pendientesLote[0].resumen.periodo_inicio) : pendientesLote[0].nombre}) <ChevronRight className="h-4 w-4" aria-hidden />
+            </button>
+            <button className="btn-secondary" onClick={() => setFase({ tipo: "lote" })}>Ver la lista</button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap justify-center gap-2">
+            <Link href={`/transacciones/${fase.cuenta.cuenta_id}`} className="btn-primary">Ver la cuenta</Link>
+            <button className="btn-secondary" onClick={() => { setLote(null); setFase({ tipo: "inicio" }); }}>Importar otro</button>
+            {lote && <button className="btn-ghost" onClick={() => setFase({ tipo: "lote" })}>Ver la lista</button>}
+          </div>
+        )}
       </div>
     );
   }
@@ -133,9 +215,13 @@ export default function ImportarVista({ usuarioId, cuentas, historial, conceptos
     return <VistaPrevia key={version} analisis={fase.analisis} filas={filas} cuentas={cuentas} nombreCuenta={nombreCuenta}
       conceptos={conceptos} proveedores={proveedores} cambiar={cambiar} setFilas={setFilas} error={error}
       importando={importando}
-      onCuenta={(c) => reabrir(fase.analisis.importacionId, c)}
-      onCancelar={() => { setFase({ tipo: "inicio" }); setError(undefined); router.refresh(); }}
-      onDescartar={() => startImportar(async () => { await descartarImportacion(fase.analisis.importacionId); setFase({ tipo: "inicio" }); router.refresh(); })}
+      onCuenta={(c) => { if (lote) setCuentaLote(c); reabrir(fase.analisis.importacionId, c, true); }}
+      onCancelar={() => { setFase({ tipo: lote ? "lote" : "inicio" }); setError(undefined); router.refresh(); }}
+      onDescartar={() => startImportar(async () => {
+        await descartarImportacion(fase.analisis.importacionId);
+        if (lote && actual) { cambiarItem(actual, { estado: "descartado" }); setFase({ tipo: "lote" }); } else setFase({ tipo: "inicio" });
+        router.refresh();
+      })}
       onImportar={() => startImportar(async () => {
         const cuentaId = fase.analisis.cuentaId;
         if (!cuentaId) { setError("Elige la cuenta."); return; }
@@ -145,9 +231,16 @@ export default function ImportarVista({ usuarioId, cuentas, historial, conceptos
         }));
         const r = await importarMovimientos(fase.analisis.importacionId, cuentaId, elegidas);
         if (r.error) { setError(r.error); return; }
+        if (lote && actual) { cambiarItem(actual, { estado: "importado", importados: r.importados ?? elegidas.length }); setCuentaLote(cuentaId); }
         setFase({ tipo: "listo", cuenta: nombreCuenta.get(cuentaId)!, importados: r.importados ?? elegidas.length });
         router.refresh();
       })} />;
+  }
+
+  if (fase.tipo === "lote" && lote) {
+    return <VistaLote lote={lote} cuentas={cuentas} cuentaLote={cuentaLote} setCuentaLote={setCuentaLote} error={error}
+      onRevisar={revisarDelLote} siguiente={pendientesLote[0]}
+      onTerminar={() => { setLote(null); setFase({ tipo: "inicio" }); setError(undefined); router.refresh(); }} />;
   }
 
   return (
@@ -156,14 +249,15 @@ export default function ImportarVista({ usuarioId, cuentas, historial, conceptos
         className={`card flex flex-col items-center gap-3 border-2 border-dashed p-10 text-center transition-colors ${encima ? "border-primary bg-primary-soft" : "border-border"}`}
         onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); setEncima(true); } }}
         onDragLeave={() => setEncima(false)}
-        onDrop={(e) => { e.preventDefault(); setEncima(false); const f = e.dataTransfer.files[0]; if (f) procesar(f); }}
+        onDrop={(e) => { e.preventDefault(); setEncima(false); elegir([...e.dataTransfer.files]); }}
         aria-label="Subir estado de cuenta"
       >
         <FileUp className="h-10 w-10 text-primary" aria-hidden />
         <p className="font-medium">Arrastra aquí el estado de cuenta (PDF o XML)</p>
+        <p className="text-sm text-muted">Puedes soltar <strong>varios meses de la misma cuenta</strong> a la vez: se leen al mismo tiempo y luego los revisas uno por uno.</p>
         <p className="text-sm text-muted">La IA detecta el banco, la cuenta, el periodo y todos los movimientos.</p>
-        <input ref={entrada} type="file" accept=".pdf,.xml,application/pdf,text/xml" className="sr-only" id="archivo-estado"
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) procesar(f); e.target.value = ""; }} />
+        <input ref={entrada} type="file" multiple accept=".pdf,.xml,application/pdf,text/xml" className="sr-only" id="archivo-estado"
+          onChange={(e) => { elegir([...(e.target.files ?? [])]); e.target.value = ""; }} />
         <label htmlFor="archivo-estado" className="btn-primary cursor-pointer">Elegir archivo</label>
         <p className="max-w-xl text-xs text-muted">
           En Banamex, el XML solo trae las comisiones e intereses del periodo (es la factura); los movimientos completos vienen en el PDF.
@@ -401,6 +495,128 @@ function VistaPrevia({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ---------- Varios estados de cuenta ------------------------------------------------
+const ETIQUETA_LOTE: Record<ItemLote["estado"], { texto: string; clase: string }> = {
+  esperando: { texto: "En espera", clase: "bg-surface-2 text-muted" },
+  subiendo: { texto: "Subiendo…", clase: "bg-surface-2 text-muted" },
+  leyendo: { texto: "La IA está leyendo…", clase: "bg-primary-soft text-primary" },
+  listo: { texto: "Listo para revisar", clase: "bg-warn-soft text-warn" },
+  error: { texto: "Error", clase: "bg-danger-soft text-danger" },
+  importado: { texto: "Importado", clase: "bg-ok-soft text-ok" },
+  descartado: { texto: "Descartado", clase: "bg-surface-2 text-muted" },
+};
+
+const diasEntre = (a: string, b: string) => Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / 86400000);
+
+function VistaLote({ lote, cuentas, cuentaLote, setCuentaLote, error, onRevisar, siguiente, onTerminar }: {
+  lote: ItemLote[]; cuentas: CuentaCorta[]; cuentaLote: number | null; setCuentaLote: (c: number | null) => void; error?: string;
+  onRevisar: (it: ItemLote) => void; siguiente?: ItemLote; onTerminar: () => void;
+}) {
+  const leyendo = lote.filter((x) => ["esperando", "subiendo", "leyendo"].includes(x.estado)).length;
+  // Orden por periodo; los que aún no se leen van al final
+  const orden = [...lote].sort((a, b) => (a.resumen?.periodo_inicio ?? "9999").localeCompare(b.resumen?.periodo_inicio ?? "9999"));
+  const leidos = orden.filter((x) => x.resumen);
+  const terminaciones = [...new Set(leidos.map((x) => x.resumen!.terminacion).filter(Boolean))];
+  const moneda = cuentas.find((c) => c.cuenta_id === cuentaLote)?.moneda ?? leidos[0]?.resumen?.moneda ?? "MXN";
+
+  return (
+    <div className="space-y-4">
+      <section className="card grid grid-cols-1 gap-4 p-5 lg:grid-cols-2">
+        <div>
+          <p className="text-lg font-semibold">{lote.length} estados de cuenta</p>
+          <p className="text-sm text-muted" role="status" data-progreso>
+            {leyendo > 0 ? <><Loader2 className="mr-1 inline h-4 w-4 animate-spin" aria-hidden /> Leyendo {leyendo} de {lote.length}… puedes empezar a revisar los que ya están listos.</>
+              : "Lectura terminada. Revísalos del más antiguo al más reciente para que los folios queden en orden."}
+          </p>
+        </div>
+        <div>
+          <label htmlFor="lote-cuenta" className="label">Cuenta donde se importan (todos)</label>
+          <select id="lote-cuenta" className={`input ${cuentaLote ? "" : "border-danger"}`} value={cuentaLote ?? ""} onChange={(e) => setCuentaLote(e.target.value ? Number(e.target.value) : null)}>
+            <option value="">Elige la cuenta…</option>
+            {cuentas.map((x) => <option key={x.cuenta_id} value={x.cuenta_id}>{x.nombre} ({x.moneda})</option>)}
+          </select>
+        </div>
+      </section>
+
+      {terminaciones.length > 1 && (
+        <p className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger" data-aviso-cuentas>
+          <AlertTriangle className="mr-1.5 inline h-4 w-4" aria-hidden />
+          Ojo: los archivos parecen de cuentas distintas (terminaciones {terminaciones.join(", ")}). Revisa cada uno antes de importarlo.
+        </p>
+      )}
+      {error && <p role="alert" className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger">{error}</p>}
+
+      <div className="card overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="border-b border-border bg-surface-2 text-left text-xs text-muted">
+            <tr>
+              <th className="px-3 py-2 font-medium">Archivo</th>
+              <th className="px-3 py-2 font-medium">Periodo</th>
+              <th className="px-3 py-2 text-right font-medium">Movs.</th>
+              <th className="px-3 py-2 text-right font-medium">Saldo inicial</th>
+              <th className="px-3 py-2 text-right font-medium">Saldo final</th>
+              <th className="px-3 py-2 font-medium">Revisión</th>
+              <th className="px-3 py-2 font-medium">Estado</th>
+              <th className="px-3 py-2"><span className="sr-only">Acción</span></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {orden.map((it) => {
+              const r = it.resumen;
+              const i = leidos.indexOf(it);
+              const prev = i > 0 ? leidos[i - 1].resumen! : null;
+              const avisos: string[] = [];
+              if (r && r.cuadra === false) avisos.push(`No cuadra (dif. ${dinero(r.diferencia, moneda)})`);
+              if (r && prev && prev.saldo_final !== null && r.saldo_inicial !== null && Math.abs(prev.saldo_final - r.saldo_inicial) >= 0.015)
+                avisos.push(`Su saldo inicial no es el final del anterior (${dinero(prev.saldo_final, moneda)})`);
+              if (r?.periodo_inicio && prev?.periodo_fin && diasEntre(prev.periodo_fin, r.periodo_inicio) > 5)
+                avisos.push("Parece que falta un estado de cuenta antes de este");
+              if (r?.periodo_inicio && prev?.periodo_inicio === r.periodo_inicio) avisos.push("Periodo repetido");
+              const et = ETIQUETA_LOTE[it.estado];
+              return (
+                <tr key={it.clave} data-lote={it.estado}>
+                  <td className="max-w-64 px-3 py-2.5">
+                    <p className="truncate font-medium" title={it.nombre}>{it.nombre}</p>
+                    {r && <p className="truncate text-xs text-muted">{r.banco} · {r.producto}{r.terminacion ? ` · ${r.terminacion}` : ""}</p>}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5">{r?.periodo_inicio && r.periodo_fin ? `${fecha(r.periodo_inicio)} – ${fecha(r.periodo_fin)}` : ""}</td>
+                  <td className="num px-3 py-2.5 text-right">{r?.movimientos ?? ""}</td>
+                  <td className="num whitespace-nowrap px-3 py-2.5 text-right">{r ? dinero(r.saldo_inicial, moneda) : ""}</td>
+                  <td className="num whitespace-nowrap px-3 py-2.5 text-right">{r ? dinero(r.saldo_final, moneda) : ""}</td>
+                  <td className="px-3 py-2.5 text-xs">
+                    {it.estado === "error" ? <span className="text-danger">{it.error}</span>
+                      : !r ? "" : avisos.length ? <ul className="space-y-0.5 text-danger">{avisos.map((a) => <li key={a} className="flex gap-1"><XCircle className="h-3.5 w-3.5 shrink-0" aria-hidden />{a}</li>)}</ul>
+                        : <span className="flex items-center gap-1 text-ok"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> Cuadra</span>}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5">
+                    <span className={`badge ${et.clase}`}>{et.texto}{it.estado === "importado" ? ` · ${it.importados}` : ""}</span>
+                  </td>
+                  <td className="px-3 py-2">
+                    {it.estado === "listo" && <button className="btn-secondary px-3 py-1.5" onClick={() => onRevisar(it)}>Revisar <ChevronRight className="h-4 w-4" aria-hidden /></button>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {siguiente && (
+          <button className="btn-primary" onClick={() => onRevisar(siguiente)} disabled={!cuentaLote}>
+            Revisar el más antiguo ({siguiente.resumen?.periodo_inicio ? fecha(siguiente.resumen.periodo_inicio) : siguiente.nombre}) <ChevronRight className="h-4 w-4" aria-hidden />
+          </button>
+        )}
+        {siguiente && !cuentaLote && <p className="text-sm font-medium text-danger">Elige arriba la cuenta donde se importan.</p>}
+        <button className="btn-ghost ml-auto" onClick={onTerminar} disabled={leyendo > 0}>
+          {lote.some((x) => x.estado === "listo") ? "Terminar después" : "Terminar"}
+        </button>
+      </div>
+      {lote.some((x) => x.estado === "listo") && <p className="text-xs text-muted">Los que no revises ahora quedan en &quot;Archivos recientes&quot; como pendientes de importar.</p>}
     </div>
   );
 }

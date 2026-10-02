@@ -64,3 +64,22 @@ export type Analisis = {
   cuadre: Cuadre;
   yaImportado?: string;   // aviso si el mismo archivo ya se importó antes
 };
+
+// Resumen de una lectura, para importar varios estados de cuenta a la vez
+export type ResumenLectura = {
+  id: number;
+  nombre: string;
+  banco: string;
+  producto: string;
+  terminacion: string | null;
+  tipo_producto: EstadoIA["tipo_producto"];
+  moneda: string;
+  periodo_inicio: string | null;
+  periodo_fin: string | null;
+  saldo_inicial: number | null;
+  saldo_final: number | null;
+  movimientos: number;
+  cuadra: boolean | null;
+  diferencia: number | null;
+  cuentaId: number | null;
+};
