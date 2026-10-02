@@ -12,6 +12,7 @@ import type { Clasif } from "@/components/movimientos/TablaMovimientos";
 import { createClient } from "@/lib/supabase/client";
 import { dinero, fecha } from "@/lib/formato";
 import type { Analisis, FilaImportacion } from "@/lib/importador/esquema";
+import { cuadrar } from "@/lib/importador/analisis";
 import type { CuentaCorta } from "@/lib/transacciones";
 import { abrirImportacion, analizarArchivo, descartarImportacion, importarMovimientos } from "./actions";
 
@@ -199,6 +200,26 @@ export default function ImportarVista({ usuarioId, cuentas, historial, conceptos
 }
 
 // ---------- Vista previa ----------------------------------------------------------
+const FECHA_OK = (f: string) => /^\d{4}-\d{2}-\d{2}$/.test(f) && !Number.isNaN(Date.parse(f));
+const elegidas_ = (fs: Fila[]) => fs.filter((f) => f.incluir);
+
+// Importe editable: se escribe libre y se guarda como número (vacío = 0)
+function Importe({ valor, onCambio, clase, etiqueta }: { valor: number; onCambio: (v: number) => void; clase: string; etiqueta: string }) {
+  const [texto, setTexto] = useState(valor ? valor.toFixed(2) : "");
+  const [editando, setEditando] = useState(false);
+  const mostrado = editando ? texto : valor ? valor.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "";
+  return (
+    <input inputMode="decimal" className={`input num w-28 py-1 text-right ${clase}`} value={mostrado} placeholder="0.00" aria-label={etiqueta}
+      onFocus={() => { setTexto(valor ? valor.toFixed(2) : ""); setEditando(true); }}
+      onChange={(e) => {
+        const t = e.target.value.replace(/[^\d.]/g, "");
+        setTexto(t);
+        const n = Math.round((Number(t) || 0) * 100) / 100;
+        onCambio(n);
+      }}
+      onBlur={() => setEditando(false)} />
+  );
+}
 function VistaPrevia({
   analisis, filas, cuentas, nombreCuenta, conceptos, proveedores, cambiar, setFilas, error, importando,
   onCuenta, onCancelar, onDescartar, onImportar,
@@ -210,7 +231,10 @@ function VistaPrevia({
   onCuenta: (c: number | null) => void; onCancelar: () => void; onDescartar: () => void; onImportar: () => void;
 }) {
   const d = analisis.datos;
-  const c = analisis.cuadre;
+  // El cuadre se recalcula al corregir importes en la vista previa
+  const { cuadre: c, saldosOk } = useMemo(() => cuadrar({ ...d, movimientos: filas }), [d, filas]);
+  const sinImporte = elegidas_(filas).filter((f) => !f.cargo && !f.abono).length;
+  const fechaMala = elegidas_(filas).filter((f) => !FECHA_OK(f.fecha)).length;
   const cuenta = analisis.cuentaId ? nombreCuenta.get(analisis.cuentaId) : undefined;
   const moneda = cuenta?.moneda ?? d.moneda ?? "MXN";
   const elegidas = filas.filter((f) => f.incluir);
@@ -286,29 +310,39 @@ function VistaPrevia({
               <th className="px-3 py-2 text-right font-medium">Cargo</th>
               <th className="px-3 py-2 text-right font-medium">Abono</th>
               <th className="px-3 py-2 font-medium">Estado</th>
-              <th className="min-w-56 px-3 py-2 font-medium">A favor de</th>
-              <th className="min-w-56 px-3 py-2 font-medium">Concepto</th>
+              <th className="min-w-48 px-3 py-2 font-medium">A favor de</th>
+              <th className="min-w-48 px-3 py-2 font-medium">Concepto</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {filas.map((f) => (
+            {filas.map((f, n) => (
               <tr key={f.indice} className={`align-top ${!f.incluir ? "opacity-55" : ""}`} data-estado={f.estado}>
                 <td className="px-3 py-2.5">
                   <input type="checkbox" checked={f.incluir} onChange={(e) => cambiar(f.indice, { incluir: e.target.checked })}
                     className="h-4 w-4 accent-[var(--primary)]" aria-label={`Importar ${f.descripcion}`} />
                 </td>
-                <td className="whitespace-nowrap px-3 py-2.5">{fecha(f.fecha)}</td>
-                <td className="min-w-72 max-w-[28rem] px-3 py-2">
+                <td className="px-3 py-2">
+                  <input type="date" className={`input w-36 py-1 ${FECHA_OK(f.fecha) ? "" : "border-danger"}`} value={FECHA_OK(f.fecha) ? f.fecha : ""}
+                    onChange={(e) => cambiar(f.indice, { fecha: e.target.value })} aria-label="Fecha" aria-invalid={!FECHA_OK(f.fecha)} />
+                </td>
+                <td className="min-w-60 max-w-[26rem] px-3 py-2">
                   <input className="input py-1" value={f.descripcion} onChange={(e) => cambiar(f.indice, { descripcion: e.target.value })} aria-label="Descripción" />
                   <p className="mt-1 line-clamp-2 text-xs text-muted" title={f.detalle}>{[f.contraparte, f.detalle].filter(Boolean).join(" · ")}</p>
                 </td>
-                <td className="num whitespace-nowrap px-3 py-2.5 text-right text-danger">{f.cargo ? dinero(f.cargo, moneda) : ""}</td>
-                <td className="num whitespace-nowrap px-3 py-2.5 text-right text-ok">{f.abono ? dinero(f.abono, moneda) : ""}</td>
+                <td className="px-3 py-2">
+                  <Importe valor={f.cargo} clase="text-danger" etiqueta="Cargo"
+                    onCambio={(v) => cambiar(f.indice, v ? { cargo: v, abono: 0 } : { cargo: 0 })} />
+                </td>
+                <td className="px-3 py-2">
+                  <Importe valor={f.abono} clase="text-ok" etiqueta="Abono"
+                    onCambio={(v) => cambiar(f.indice, v ? { abono: v, cargo: 0 } : { abono: 0 })} />
+                  {!f.cargo && !f.abono && <p className="mt-1 text-right text-xs text-muted">Sin importe ($0)</p>}
+                </td>
                 <td className="whitespace-nowrap px-3 py-2.5">
                   {f.estado === "nuevo" ? <span className="badge bg-ok-soft text-ok">Nuevo</span>
                     : f.estado === "duplicado" ? <span className="badge bg-surface-2 text-muted" title={`Ya existe: folio ${f.coincide?.folio}`}>Ya existe · folio {f.coincide?.folio}</span>
                       : <span className="badge bg-warn-soft text-warn" title={`Mismo importe el ${fecha(f.coincide?.fecha)}`}>¿Duplicado? folio {f.coincide?.folio}</span>}
-                  {f.saldoOk === false && <span className="mt-1 flex items-center gap-1 text-xs text-danger"><XCircle className="h-3.5 w-3.5" aria-hidden /> Saldo no cuadra</span>}
+                  {saldosOk[n] === false && <span className="mt-1 flex items-center gap-1 text-xs text-danger"><XCircle className="h-3.5 w-3.5" aria-hidden /> Saldo no cuadra</span>}
                 </td>
                 <td className="px-3 py-2">
                   <Combobox nombre={`p${f.indice}`} opciones={prov} valorInicial={f.proveedor_id} placeholder="—"
@@ -326,6 +360,13 @@ function VistaPrevia({
         </table>
       </div>
 
+      {(sinImporte > 0 || fechaMala > 0) && (
+        <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn" data-aviso-revisar>
+          <AlertTriangle className="mr-1.5 inline h-4 w-4" aria-hidden />
+          {fechaMala > 0 && <>{fechaMala} movimiento(s) sin fecha válida: corrígela en la tabla para poder importar. </>}
+          {sinImporte > 0 && <>{sinImporte} movimiento(s) van sin importe ($0). Si es correcto (por ejemplo, una exención de comisión) puedes importarlos así; si no, escribe el cargo o abono en la tabla o quítales la palomita.</>}
+        </p>
+      )}
       {error && <p role="alert" className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger">{error}</p>}
 
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/95 px-4 py-3 backdrop-blur lg:left-64">
@@ -339,7 +380,7 @@ function VistaPrevia({
           <div className="ml-auto flex flex-wrap gap-2">
             <button className="btn-ghost" onClick={onCancelar} disabled={importando}><RotateCcw className="h-4 w-4" aria-hidden /> Después</button>
             <button className="btn-ghost text-danger" onClick={onDescartar} disabled={importando}><Trash2 className="h-4 w-4" aria-hidden /> Descartar</button>
-            <button className="btn-primary" onClick={onImportar} disabled={importando || !elegidas.length || !analisis.cuentaId}>
+            <button className="btn-primary" onClick={onImportar} disabled={importando || !elegidas.length || !analisis.cuentaId || fechaMala > 0}>
               {importando ? "Importando…" : `Importar ${elegidas.length} a ${cuenta?.nombre ?? "…"}`}
             </button>
           </div>

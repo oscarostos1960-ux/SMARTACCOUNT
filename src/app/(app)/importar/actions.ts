@@ -144,8 +144,10 @@ export async function importarMovimientos(id: number, cuentaId: number, filas: F
   const fechaOk = (f: string) => /^\d{4}-\d{2}-\d{2}$/.test(f) && !Number.isNaN(Date.parse(f));
   const num = (n: unknown) => Math.round(Math.max(0, Number(n) || 0) * 100) / 100;
   const idOpc = (v: string) => (Number.isInteger(Number(v)) && Number(v) > 0 ? Number(v) : null);
-  const malas = filas.filter((f) => !fechaOk(f.fecha) || (num(f.cargo) === 0 && num(f.abono) === 0));
-  if (malas.length) return { error: `Revisa ${malas.length} movimiento(s): falta la fecha o el importe.` };
+  // Los movimientos en $0 (p. ej. exenciones de comisión) sí se permiten; solo la fecha es obligatoria.
+  const malas = filas.filter((f) => !fechaOk(f.fecha));
+  if (malas.length) return { error: `Revisa ${malas.length} movimiento(s): falta la fecha o no es válida.` };
+  if (filas.some((f) => num(f.cargo) > 0 && num(f.abono) > 0)) return { error: "Un movimiento no puede tener cargo y abono a la vez." };
 
   // Del más antiguo al más reciente (respetando el orden del estado de cuenta)
   const ordenadas = filas.map((f, i) => ({ f, i })).sort((a, b) => a.f.fecha.localeCompare(b.f.fecha) || a.i - b.i).map((x) => x.f);
