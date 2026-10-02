@@ -65,6 +65,7 @@ export type Analisis = {
   filas: FilaImportacion[];
   cuadre: Cuadre;
   yaImportado?: string;   // aviso si el mismo archivo ya se importó antes
+  regla: { proveedorBanco: number | null; conceptoComision: number | null };   // comisiones → banco que las cobra
 };
 
 // Resumen de una lectura, para importar varios estados de cuenta a la vez

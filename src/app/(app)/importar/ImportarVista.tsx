@@ -183,6 +183,18 @@ export default function ImportarVista({ usuarioId, cuentas, historial, conceptos
 
   // Al elegir "A favor de" o "Concepto", se llenan igual los renglones parecidos que estén vacíos
   function asignar(i: number, campo: "proveedor_id" | "concepto_id", valor: string) {
+    // Comisión bancaria: el "A favor de" es siempre el banco que la cobra
+    const regla = fase.tipo === "vista" ? fase.analisis.regla : undefined;
+    if (campo === "concepto_id" && regla?.proveedorBanco && regla.conceptoComision && Number(valor) === regla.conceptoComision) {
+      const banco = String(regla.proveedorBanco);
+      const nuevas = filas.map((f) => {
+        const misma = f.indice === i || (!f.concepto_id && esParecido(filas.find((x) => x.indice === i)!, f));
+        return misma ? { ...f, concepto_id: valor, proveedor_id: banco, copiado: f.indice !== i, rev: (f.rev ?? 0) + 1 } : f;
+      });
+      setFilas(nuevas);
+      setLlenados("Comisión bancaria: el \"A favor de\" se puso como el banco que la cobra.");
+      return;
+    }
     const origen = filas.find((f) => f.indice === i);
     let n = 0;
     const nuevas = filas.map((f) => {

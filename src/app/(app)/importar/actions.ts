@@ -15,6 +15,36 @@ const restarDias = (iso: string, n: number) => {
   return d.toISOString().slice(0, 10);
 };
 
+// Banco que cobra las comisiones: el que lee la IA en el estado de cuenta (o, si no, el de la cuenta),
+// buscado entre los proveedores ("A favor de"). Bancomer y BBVA son el mismo; Citi y Banamex también.
+const ALIAS_BANCO: [RegExp, string[]][] = [
+  [/BANAMEX|CITI/, ["BANAMEX"]], [/SCOTIA/, ["SCOTIABANK"]], [/BBVA|BANCOMER/, ["BANCOMER", "BBVA"]],
+  [/BANORTE/, ["BANORTE"]], [/SANTANDER/, ["SANTANDER"]], [/HSBC/, ["HSBC"]], [/INBURSA/, ["INBURSA"]],
+  [/AZTECA/, ["AZTECA"]], [/BANREGIO/, ["BANREGIO"]], [/BANBAJIO|BAJIO/, ["BAJIO"]], [/AFIRME/, ["AFIRME"]],
+];
+async function reglaBanco(supabase: Supa, bancoLeido: string | null, cuentaId: number | null): Promise<Analisis["regla"]> {
+  let banco = (bancoLeido ?? "").toUpperCase();
+  if (!ALIAS_BANCO.some(([re]) => re.test(banco)) && cuentaId) {
+    const { data: c } = await supabase.from("cuentas").select("banco_id").eq("id", cuentaId).maybeSingle();
+    if (c?.banco_id) {
+      const { data: b } = await supabase.from("bancos").select("nombre").eq("id", c.banco_id).maybeSingle();
+      banco = String(b?.nombre ?? "").toUpperCase();
+    }
+  }
+  const nombres = ALIAS_BANCO.find(([re]) => re.test(banco))?.[1];
+  // El proveedor del banco: el primero (más antiguo) cuyo nombre o razón social empieza con el nombre del banco
+  let proveedorBanco: number | null = null;
+  for (const n of nombres ?? []) {
+    for (const campo of ["razon_social", "nombre"]) {
+      const { data } = await supabase.from("proveedores").select("id").eq("activo", true).ilike(campo, `${n}%`).order("id").limit(1);
+      if (data?.[0]) { proveedorBanco = Number(data[0].id); break; }
+    }
+    if (proveedorBanco) break;
+  }
+  const { data: cs } = await supabase.from("conceptos").select("id").eq("activo", true).ilike("nombre", "COMISION BANCARIA").order("id").limit(1);
+  return { proveedorBanco, conceptoComision: cs?.[0] ? Number(cs[0].id) : null };
+}
+
 // Arma la vista previa para una cuenta: duplicados, sugerencias y cuadre.
 async function construirAnalisis(supabase: Supa, imp: {
   id: number; archivo_nombre: string; archivo_tipo: "pdf" | "xml"; estado: string; datos: EstadoIA; archivo_huella: string | null;
@@ -45,7 +75,8 @@ async function construirAnalisis(supabase: Supa, imp: {
       .map((h) => ({ texto: [h.descripcion, h.leyenda1, h.leyenda2, h.leyenda3].filter(Boolean).join(" "), proveedor_id: h.proveedor_id, concepto_id: h.concepto_id })));
   }
 
-  const { filas, cuadre } = armarFilas(datos, existentes, historial);
+  const regla = await reglaBanco(supabase, datos.banco, cuentaId);
+  const { filas, cuadre } = armarFilas(datos, existentes, historial, regla);
   let yaImportado: string | undefined;
   if (imp.archivo_huella) {
     const { data } = await supabase.from("importaciones").select("id, created_at, movimientos_importados")
@@ -56,7 +87,7 @@ async function construirAnalisis(supabase: Supa, imp: {
   void _m;
   return {
     importacionId: imp.id, archivoNombre: imp.archivo_nombre, archivoTipo: imp.archivo_tipo, estado: imp.estado,
-    datos: resto, cuentaId, cuentaDetectada: detectada, filas, cuadre, yaImportado,
+    datos: resto, cuentaId, cuentaDetectada: detectada, filas, cuadre, yaImportado, regla,
   };
 }
 

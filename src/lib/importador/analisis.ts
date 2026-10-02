@@ -118,11 +118,22 @@ export function sugerir(movs: MovimientoIA[], historial: Historico[]) {
 }
 
 // ---------- Todo junto: filas de la vista previa ----------
-export function armarFilas(datos: EstadoIA, existentes: Existente[], historial: Historico[]) {
+// ---------- Comisiones: siempre a favor del banco que las cobra ----------
+export type ReglaBanco = { proveedorBanco: number | null; conceptoComision: number | null };
+const ES_COMISION = /COMISI|\bCOM\b|ANUALIDAD/;
+const ES_CARGO_DEL_BANCO = /COMISI|\bCOM\b|ANUALIDAD|INTERES/;   // "IVA" solo no: puede ser un pago de impuestos
+// Un abono con la palabra "comisión" suele ser un ingreso (p. ej. comisiones de una aseguradora), no un cobro del banco
+const esCargo = (m: Pick<MovimientoIA, "cargo" | "abono">) => m.abono === 0;
+export function esComisionBancaria(m: Pick<MovimientoIA, "descripcion" | "cargo" | "abono">, conceptoId: number | null, regla: ReglaBanco) {
+  if (regla.conceptoComision && conceptoId === regla.conceptoComision) return true;
+  return esCargo(m) && ES_COMISION.test(normal(m.descripcion));
+}
+
+export function armarFilas(datos: EstadoIA, existentes: Existente[], historial: Historico[], regla: ReglaBanco = { proveedorBanco: null, conceptoComision: null }) {
   const { cuadre, saldosOk } = cuadrar(datos);
   const dups = buscarDuplicados(datos.movimientos, existentes);
   const sugs = sugerir(datos.movimientos, historial);
-  const filas: FilaImportacion[] = datos.movimientos.map((m, i) => ({
+  const filas: FilaImportacion[] = datos.movimientos.map((m, i) => aplicarReglaBanco({
     ...m,
     descripcion: ocultarTarjetas(m.descripcion) ?? "",
     detalle: ocultarTarjetas(m.detalle) ?? "",
@@ -134,7 +145,7 @@ export function armarFilas(datos: EstadoIA, existentes: Existente[], historial: 
     proveedor_id: sugs[i]?.proveedor_id ? String(sugs[i]!.proveedor_id) : "",
     concepto_id: sugs[i]?.concepto_id ? String(sugs[i]!.concepto_id) : "",
     sugerencia: sugs[i] ? `Parecido ${Math.round(sugs[i]!.puntaje * 100)}% a movimientos anteriores` : undefined,
-  }));
+  }, regla));
   return { filas, cuadre };
 }
 
@@ -156,4 +167,18 @@ export function esParecido(a: Comparable, b: Comparable) {
   let comunes = 0;
   for (const p of pa) if (pb.has(p)) comunes++;
   return comunes / Math.max(pa.size, pb.size) >= 0.6;
+}
+
+// Comisiones, intereses e IVA que cobra el banco: el "A favor de" es el banco del estado de cuenta
+// (aunque en otras cuentas se haya usado otro banco). A las comisiones además se les pone el concepto Comisión bancaria.
+export function aplicarReglaBanco(f: FilaImportacion, regla: ReglaBanco): FilaImportacion {
+  if (!regla.proveedorBanco) return f;
+  const comision = esComisionBancaria(f, f.concepto_id ? Number(f.concepto_id) : null, regla);
+  if (!comision && !(esCargo(f) && ES_CARGO_DEL_BANCO.test(normal(f.descripcion)))) return f;
+  return {
+    ...f,
+    proveedor_id: String(regla.proveedorBanco),
+    concepto_id: f.concepto_id || (comision && regla.conceptoComision ? String(regla.conceptoComision) : ""),
+    sugerencia: "Cargo del banco: a favor del banco que lo cobra",
+  };
 }
