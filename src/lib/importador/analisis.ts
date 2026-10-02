@@ -103,17 +103,17 @@ export function sugerir(movs: MovimientoIA[], historial: Historico[]) {
       return s;
     });
     if (mejor < 0.55) return null;
-    // Entre los más parecidos, el proveedor/concepto que más se repite
-    const votos = new Map<string, { n: number; proveedor_id: number | null; concepto_id: number | null }>();
+    // Entre los más parecidos, el proveedor y el concepto que más se repiten, cada uno por separado
+    // y sin contar los vacíos: si de 8 movimientos iguales solo 1 tiene proveedor, se sugiere ese proveedor.
+    const vp = new Map<number, number>(), vc = new Map<number, number>();
     docs.forEach((d, i) => {
       if (puntajes[i] < mejor * 0.9) return;
-      const k = `${d.proveedor_id}|${d.concepto_id}`;
-      const v = votos.get(k) ?? { n: 0, proveedor_id: d.proveedor_id, concepto_id: d.concepto_id };
-      v.n++;
-      votos.set(k, v);
+      if (d.proveedor_id) vp.set(d.proveedor_id, (vp.get(d.proveedor_id) ?? 0) + 1);
+      if (d.concepto_id) vc.set(d.concepto_id, (vc.get(d.concepto_id) ?? 0) + 1);
     });
-    const ganador = [...votos.values()].sort((a, b) => b.n - a.n)[0];
-    return ganador ? { ...ganador, puntaje: mejor } : null;
+    const masVotado = (m: Map<number, number>) => [...m].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+    const proveedor_id = masVotado(vp), concepto_id = masVotado(vc);
+    return proveedor_id || concepto_id ? { proveedor_id, concepto_id, puntaje: mejor } : null;
   });
 }
 
