@@ -4,7 +4,7 @@ import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  AlertTriangle, CheckCircle2, ChevronRight, FileText, FileUp, Loader2, RotateCcw, Sparkles, Trash2, XCircle,
+  AlertTriangle, CheckCircle2, ChevronRight, Copy, FileText, FileUp, Loader2, RotateCcw, Sparkles, Trash2, XCircle,
 } from "lucide-react";
 import Combobox from "@/components/Combobox";
 import type { Opcion } from "@/components/movimientos/DialogoMovimiento";
@@ -12,7 +12,7 @@ import type { Clasif } from "@/components/movimientos/TablaMovimientos";
 import { createClient } from "@/lib/supabase/client";
 import { dinero, fecha } from "@/lib/formato";
 import type { Analisis, FilaImportacion, ResumenLectura } from "@/lib/importador/esquema";
-import { cuadrar } from "@/lib/importador/analisis";
+import { cuadrar, esParecido } from "@/lib/importador/analisis";
 import type { CuentaCorta } from "@/lib/transacciones";
 import { abrirImportacion, analizarArchivo, descartarImportacion, importarMovimientos } from "./actions";
 
@@ -68,6 +68,7 @@ export default function ImportarVista({ usuarioId, cuentas, historial, conceptos
   const entrada = useRef<HTMLInputElement>(null);
   const nombreCuenta = useMemo(() => new Map(cuentas.map((c) => [c.cuenta_id, c])), [cuentas]);
   const [lote, setLote] = useState<ItemLote[] | null>(null);
+  const [llenados, setLlenados] = useState<string>();
   const [cuentaLote, setCuentaLote] = useState<number | null>(null);
   const [actual, setActual] = useState<string | null>(null);   // archivo del lote que se está revisando
   const cambiarItem = (clave: string, c: Partial<ItemLote>) => setLote((l) => l && l.map((x) => (x.clave === clave ? { ...x, ...c } : x)));
@@ -130,6 +131,7 @@ export default function ImportarVista({ usuarioId, cuentas, historial, conceptos
     .sort((a, b) => (a.resumen?.periodo_inicio ?? "").localeCompare(b.resumen?.periodo_inicio ?? ""));
 
   function mostrar(a: Analisis, previas?: Fila[]) {
+    setLlenados(undefined);
     const antes = new Map((previas ?? []).map((f) => [f.indice, f]));
     setFilas(a.filas.map((f) => {
       const v = antes.get(f.indice);
@@ -179,6 +181,21 @@ export default function ImportarVista({ usuarioId, cuentas, historial, conceptos
 
   const cambiar = (i: number, cambios: Partial<Fila>) => setFilas((fs) => fs.map((f) => (f.indice === i ? { ...f, ...cambios } : f)));
 
+  // Al elegir "A favor de" o "Concepto", se llenan igual los renglones parecidos que estén vacíos
+  function asignar(i: number, campo: "proveedor_id" | "concepto_id", valor: string) {
+    const origen = filas.find((f) => f.indice === i);
+    let n = 0;
+    const nuevas = filas.map((f) => {
+      if (f.indice === i) return { ...f, [campo]: valor, copiado: false };
+      if (!valor || !origen || f[campo] || !esParecido(origen, f)) return f;
+      n++;
+      return { ...f, [campo]: valor, copiado: true, rev: (f.rev ?? 0) + 1 };
+    });
+    setFilas(nuevas);
+    setLlenados(n ? `Se llenaron ${n} renglón(es) parecido(s) con lo mismo. Revísalos antes de importar.` : undefined);
+  }
+
+
   if (fase.tipo === "trabajando") {
     return (
       <div className="card flex flex-col items-center gap-3 p-12 text-center" role="status">
@@ -213,7 +230,7 @@ export default function ImportarVista({ usuarioId, cuentas, historial, conceptos
 
   if (fase.tipo === "vista") {
     return <VistaPrevia key={version} analisis={fase.analisis} filas={filas} cuentas={cuentas} nombreCuenta={nombreCuenta}
-      conceptos={conceptos} proveedores={proveedores} cambiar={cambiar} setFilas={setFilas} error={error}
+      conceptos={conceptos} proveedores={proveedores} cambiar={cambiar} asignar={asignar} llenados={llenados} setFilas={setFilas} error={error}
       importando={importando}
       onCuenta={(c) => { if (lote) setCuentaLote(c); reabrir(fase.analisis.importacionId, c, true); }}
       onCancelar={() => { setFase({ tipo: lote ? "lote" : "inicio" }); setError(undefined); router.refresh(); }}
@@ -325,12 +342,14 @@ function Importe({ valor, onCambio, clase, etiqueta }: { valor: number; onCambio
   );
 }
 function VistaPrevia({
-  analisis, filas, cuentas, nombreCuenta, conceptos, proveedores, cambiar, setFilas, error, importando,
+  analisis, filas, cuentas, nombreCuenta, conceptos, proveedores, cambiar, asignar, llenados, setFilas, error, importando,
   onCuenta, onCancelar, onDescartar, onImportar,
 }: {
   analisis: Analisis; filas: Fila[]; cuentas: CuentaCorta[]; nombreCuenta: Map<number, CuentaCorta>;
   conceptos: Opcion[]; proveedores: Opcion[];
-  cambiar: (i: number, c: Partial<Fila>) => void; setFilas: React.Dispatch<React.SetStateAction<Fila[]>>;
+  cambiar: (i: number, c: Partial<Fila>) => void;
+  asignar: (i: number, campo: "proveedor_id" | "concepto_id", valor: string) => void; llenados?: string;
+  setFilas: React.Dispatch<React.SetStateAction<Fila[]>>;
   error?: string; importando: boolean;
   onCuenta: (c: number | null) => void; onCancelar: () => void; onDescartar: () => void; onImportar: () => void;
 }) {
@@ -449,13 +468,14 @@ function VistaPrevia({
                   {saldosOk[n] === false && <span className="mt-1 flex items-center gap-1 text-xs text-danger"><XCircle className="h-3.5 w-3.5" aria-hidden /> Saldo no cuadra</span>}
                 </td>
                 <td className="px-3 py-2">
-                  <Combobox nombre={`p${f.indice}`} opciones={prov} valorInicial={f.proveedor_id} placeholder="—"
-                    onCambio={(v) => cambiar(f.indice, { proveedor_id: v })} />
-                  {f.sugerencia && f.proveedor_id && <p className="mt-1 flex items-center gap-1 text-xs text-primary"><Sparkles className="h-3 w-3" aria-hidden /> Sugerido</p>}
+                  <Combobox key={`p${f.indice}-${f.rev ?? 0}`} nombre={`p${f.indice}`} opciones={prov} valorInicial={f.proveedor_id} placeholder="—"
+                    onCambio={(v) => asignar(f.indice, "proveedor_id", v)} />
+                  {f.copiado && f.proveedor_id ? <p className="mt-1 flex items-center gap-1 text-xs text-primary" data-copiado><Copy className="h-3 w-3" aria-hidden /> Igual que otro renglón</p>
+                    : f.sugerencia && f.proveedor_id && <p className="mt-1 flex items-center gap-1 text-xs text-primary"><Sparkles className="h-3 w-3" aria-hidden /> Sugerido</p>}
                 </td>
                 <td className="px-3 py-2">
-                  <Combobox nombre={`c${f.indice}`} opciones={conc} valorInicial={f.concepto_id} placeholder="—"
-                    onCambio={(v) => cambiar(f.indice, { concepto_id: v })} />
+                  <Combobox key={`c${f.indice}-${f.rev ?? 0}`} nombre={`c${f.indice}`} opciones={conc} valorInicial={f.concepto_id} placeholder="—"
+                    onCambio={(v) => asignar(f.indice, "concepto_id", v)} />
                 </td>
               </tr>
             ))}
@@ -464,6 +484,11 @@ function VistaPrevia({
         </table>
       </div>
 
+      {llenados && (
+        <p className="sticky bottom-20 z-20 rounded-lg bg-primary-soft px-4 py-3 text-sm text-primary shadow" role="status" data-llenados>
+          <Copy className="mr-1.5 inline h-4 w-4" aria-hidden />{llenados}
+        </p>
+      )}
       {(sinImporte > 0 || fechaMala > 0) && (
         <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn" data-aviso-revisar>
           <AlertTriangle className="mr-1.5 inline h-4 w-4" aria-hidden />

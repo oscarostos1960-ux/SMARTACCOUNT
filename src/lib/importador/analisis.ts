@@ -137,3 +137,23 @@ export function armarFilas(datos: EstadoIA, existentes: Existente[], historial: 
   }));
   return { filas, cuadre };
 }
+
+// ---------- Renglones parecidos dentro del mismo estado de cuenta ----------
+// Para llenar "A favor de" / "Concepto" en los demás renglones iguales al que el usuario acaba de clasificar.
+type Comparable = Pick<MovimientoIA, "descripcion" | "contraparte" | "detalle" | "cargo" | "abono">;
+const normal = (t: string | null) => (t ?? "").toUpperCase().normalize("NFD").replace(/\p{Diacritic}/gu, "").replace(/[^A-Z0-9]+/g, " ").trim();
+const tipoMov = (m: Comparable) => (m.cargo > 0 ? "c" : m.abono > 0 ? "a" : "0");
+
+export function esParecido(a: Comparable, b: Comparable) {
+  if (tipoMov(a) !== tipoMov(b)) return false;                       // un pago y un depósito no son lo mismo
+  const ca = normal(a.contraparte), cb = normal(b.contraparte);
+  if (ca && cb) return ca === cb;                                    // mismo beneficiario u ordenante (aunque cambie el banco)
+  // Se comparan las palabras (sin folios, referencias ni claves con números), incluido el detalle,
+  // donde muchas veces viene el beneficiario (p. ej. "PAGO A TERCEROS ... AL BENEF GABRIELA ...")
+  const clave = (m: Comparable) => new Set(palabras(`${m.descripcion} ${m.contraparte ?? ""} ${m.detalle ?? ""}`).filter((p) => !/\d/.test(p)));
+  const pa = clave(a), pb = clave(b);
+  if (!pa.size || !pb.size) return normal(a.descripcion) === normal(b.descripcion) && !!normal(a.descripcion);
+  let comunes = 0;
+  for (const p of pa) if (pb.has(p)) comunes++;
+  return comunes / Math.max(pa.size, pb.size) >= 0.6;
+}
