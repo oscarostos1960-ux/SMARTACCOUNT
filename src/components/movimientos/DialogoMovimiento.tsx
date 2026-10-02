@@ -13,6 +13,14 @@ import Documentos, { subirArchivos } from "./Documentos";
 import AvisosMovimiento, { ListaResultados } from "./Avisos";
 import type { ResultadoAviso } from "@/lib/avisos";
 import type { Clasif } from "./TablaMovimientos";
+import { crearConceptoRapido, crearProveedorRapido } from "@/app/(app)/catalogos/rapido";
+
+// Alta rápida desde la lista (solo el titular; si no puede, la lista muestra el aviso)
+const altaRapida = (fn: (t: string) => Promise<{ valor?: string; etiqueta?: string; error?: string }>) =>
+  async (t: string): Promise<OpcionCombo | { error: string }> => {
+    const r = await fn(t);
+    return r.valor ? { valor: r.valor, etiqueta: r.etiqueta ?? t } : { error: r.error ?? "No se pudo dar de alta." };
+  };
 
 export type Opcion = OpcionCombo & { activo: boolean };
 
@@ -192,7 +200,7 @@ export function DialogoMovimiento({
           )}
 
           <Campo id="m-proveedor" etiqueta="A favor de (proveedor)" className="sm:col-span-6" ayuda={!m ? "Al elegirlo, se llenan los datos de su último movimiento." : undefined}>
-            <Combobox id="m-proveedor" nombre="proveedor_id" opciones={proveedoresVisibles} valorInicial={val("proveedor_id", m?.proveedor_id ? String(m.proveedor_id) : inicial?.proveedor_id ?? "")} placeholder="Buscar proveedor…" onCambio={alElegirProveedor} />
+            <Combobox id="m-proveedor" nombre="proveedor_id" opciones={proveedoresVisibles} valorInicial={val("proveedor_id", m?.proveedor_id ? String(m.proveedor_id) : inicial?.proveedor_id ?? "")} placeholder="Buscar proveedor…" onCambio={alElegirProveedor} onCrear={altaRapida(crearProveedorRapido)} />
           </Campo>
 
           <Campo id="m-folio" etiqueta="Folio" error={e.folio} className="sm:col-span-2"
@@ -238,7 +246,7 @@ export function DialogoMovimiento({
               <input id="m-l3" name="leyenda3" type="text" defaultValue={val("leyenda3", m?.leyenda3 ?? p?.leyenda3 ?? "")} className="input" maxLength={500} />
             </Campo>
             <Campo id="m-concepto" etiqueta="Concepto" className={cuentaSel.moneda !== "MXN" ? "sm:col-span-4" : "sm:col-span-6"}>
-              <Combobox id="m-concepto" nombre="concepto_id" opciones={conceptosVisibles} valorInicial={conceptoInicial} placeholder="Buscar concepto…" />
+              <Combobox id="m-concepto" nombre="concepto_id" opciones={conceptosVisibles} valorInicial={conceptoInicial} placeholder="Buscar concepto…" onCrear={altaRapida(crearConceptoRapido)} />
             </Campo>
             {cuentaSel.moneda !== "MXN" ? (
               <Campo id="m-tc" etiqueta="Tipo de cambio" error={e.tipo_cambio} className="sm:col-span-2" ayuda={`Pesos por 1 ${cuentaSel.moneda}`}>

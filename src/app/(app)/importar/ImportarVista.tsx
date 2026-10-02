@@ -4,7 +4,7 @@ import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  AlertTriangle, CheckCircle2, ChevronRight, Copy, FileText, FileUp, Loader2, RotateCcw, Sparkles, Trash2, XCircle,
+  AlertTriangle, CheckCircle2, ChevronRight, Copy, FileText, FileUp, Loader2, Plus, RotateCcw, Sparkles, Tags, Trash2, XCircle,
 } from "lucide-react";
 import Combobox from "@/components/Combobox";
 import type { Opcion } from "@/components/movimientos/DialogoMovimiento";
@@ -15,6 +15,7 @@ import type { Analisis, FilaImportacion, ResumenLectura } from "@/lib/importador
 import { cuadrar, esParecido } from "@/lib/importador/analisis";
 import type { CuentaCorta } from "@/lib/transacciones";
 import { abrirImportacion, analizarArchivo, descartarImportacion, importarMovimientos } from "./actions";
+import { crearClasificacionRapida, crearConceptoRapido, crearProveedorRapido } from "../catalogos/rapido";
 
 export type ImportacionResumen = {
   id: number; archivo_nombre: string; archivo_tipo: string; estado: string; error: string | null; cuenta_id: number | null;
@@ -50,8 +51,9 @@ const ESTADOS: Record<string, { texto: string; clase: string }> = {
   importado: { texto: "Importado", clase: "bg-ok-soft text-ok" },
 };
 
-export default function ImportarVista({ usuarioId, cuentas, historial, conceptos, proveedores }: {
+export default function ImportarVista({ usuarioId, cuentas, historial, conceptos: conceptosIni, proveedores: proveedoresIni, clasificaciones: clasifIni, puedeCrear }: {
   usuarioId: string;
+  puedeCrear: boolean;
   cuentas: CuentaCorta[];
   historial: ImportacionResumen[];
   conceptos: Opcion[];
@@ -59,6 +61,25 @@ export default function ImportarVista({ usuarioId, cuentas, historial, conceptos
   clasificaciones: Clasif[];
 }) {
   const router = useRouter();
+  // Catálogos locales: lo que se da de alta aquí aparece de inmediato en todos los renglones
+  const [proveedores, setProveedores] = useState<Opcion[]>(proveedoresIni);
+  const [conceptos, setConceptos] = useState<Opcion[]>(conceptosIni);
+  const [clasificaciones, setClasificaciones] = useState<Clasif[]>(clasifIni);
+  const agregarOpcion = (set: React.Dispatch<React.SetStateAction<Opcion[]>>) =>
+    async (texto: string): Promise<Opcion | { error: string }> => {
+      const r = texto.trim().length ? await (set === setProveedores ? crearProveedorRapido(texto) : crearConceptoRapido(texto)) : { error: "Escribe un nombre." };
+      if (r.error || !r.valor) return { error: r.error ?? "No se pudo dar de alta." };
+      const o = { valor: r.valor, etiqueta: r.etiqueta ?? texto, activo: true };
+      set((l) => (l.some((x) => x.valor === o.valor) ? l : [...l, o].sort((a, b) => a.etiqueta.localeCompare(b.etiqueta, "es"))));
+      return o;
+    };
+  async function crearClasificacion(texto: string): Promise<Clasif | { error: string }> {
+    const r = await crearClasificacionRapida(texto);
+    if (r.error || !r.valor) return { error: r.error ?? "No se pudo dar de alta." };
+    const c = { id: Number(r.valor), nombre: r.etiqueta ?? texto, color: r.color ?? "#64748B", activo: true };
+    setClasificaciones((l) => (l.some((x) => x.id === c.id) ? l : [...l, c].sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))));
+    return c;
+  }
   const [fase, setFase] = useState<Fase>({ tipo: "inicio" });
   const [filas, setFilas] = useState<Fila[]>([]);
   const [error, setError] = useState<string>();
@@ -139,6 +160,7 @@ export default function ImportarVista({ usuarioId, cuentas, historial, conceptos
       const base = v ? {
         ...f, fecha: v.fecha, descripcion: v.descripcion, cargo: v.cargo, abono: v.abono,
         proveedor_id: v.proveedor_id || f.proveedor_id, concepto_id: v.concepto_id || f.concepto_id,
+        clasificaciones: v.clasificaciones,
       } : f;
       return { ...base, incluir: f.estado === "nuevo" };
     }));
@@ -182,6 +204,19 @@ export default function ImportarVista({ usuarioId, cuentas, historial, conceptos
   const cambiar = (i: number, cambios: Partial<Fila>) => setFilas((fs) => fs.map((f) => (f.indice === i ? { ...f, ...cambios } : f)));
 
   // Al elegir "A favor de" o "Concepto", se llenan igual los renglones parecidos que estén vacíos
+  // Clasificaciones de un renglón; los parecidos sin clasificar reciben las mismas
+  function asignarClasif(i: number, ids: string[]) {
+    const origen = filas.find((f) => f.indice === i);
+    let n = 0;
+    setFilas(filas.map((f) => {
+      if (f.indice === i) return { ...f, clasificaciones: ids };
+      if (!ids.length || !origen || (f.clasificaciones ?? []).length || !esParecido(origen, f)) return f;
+      n++;
+      return { ...f, clasificaciones: ids };
+    }));
+    setLlenados(n ? `Se clasificaron igual ${n} renglón(es) parecido(s). Revísalos antes de importar.` : undefined);
+  }
+
   function asignar(i: number, campo: "proveedor_id" | "concepto_id", valor: string) {
     // Comisión bancaria: el "A favor de" es siempre el banco que la cobra
     const regla = fase.tipo === "vista" ? fase.analisis.regla : undefined;
@@ -243,6 +278,10 @@ export default function ImportarVista({ usuarioId, cuentas, historial, conceptos
   if (fase.tipo === "vista") {
     return <VistaPrevia key={version} analisis={fase.analisis} filas={filas} cuentas={cuentas} nombreCuenta={nombreCuenta}
       conceptos={conceptos} proveedores={proveedores} cambiar={cambiar} asignar={asignar} llenados={llenados} setFilas={setFilas} error={error}
+      clasificaciones={clasificaciones} asignarClasif={asignarClasif}
+      crearProveedor={puedeCrear ? agregarOpcion(setProveedores) : undefined}
+      crearConcepto={puedeCrear ? agregarOpcion(setConceptos) : undefined}
+      crearClasificacion={puedeCrear ? crearClasificacion : undefined}
       importando={importando}
       onCuenta={(c) => { if (lote) setCuentaLote(c); reabrir(fase.analisis.importacionId, c, true); }}
       onCancelar={() => { setFase({ tipo: lote ? "lote" : "inicio" }); setError(undefined); router.refresh(); }}
@@ -257,6 +296,7 @@ export default function ImportarVista({ usuarioId, cuentas, historial, conceptos
         const elegidas = filas.filter((f) => f.incluir).map((f) => ({
           fecha: f.fecha, descripcion: f.descripcion, detalle: f.detalle, contraparte: f.contraparte, referencia: f.referencia,
           cargo: f.cargo, abono: f.abono, proveedor_id: f.proveedor_id, concepto_id: f.concepto_id,
+          clasificaciones: f.clasificaciones ?? [],
         }));
         const r = await importarMovimientos(fase.analisis.importacionId, cuentaId, elegidas);
         if (r.error) { setError(r.error); return; }
@@ -355,12 +395,17 @@ function Importe({ valor, onCambio, clase, etiqueta }: { valor: number; onCambio
 }
 function VistaPrevia({
   analisis, filas, cuentas, nombreCuenta, conceptos, proveedores, cambiar, asignar, llenados, setFilas, error, importando,
+  clasificaciones, asignarClasif, crearProveedor, crearConcepto, crearClasificacion,
   onCuenta, onCancelar, onDescartar, onImportar,
 }: {
   analisis: Analisis; filas: Fila[]; cuentas: CuentaCorta[]; nombreCuenta: Map<number, CuentaCorta>;
   conceptos: Opcion[]; proveedores: Opcion[];
   cambiar: (i: number, c: Partial<Fila>) => void;
   asignar: (i: number, campo: "proveedor_id" | "concepto_id", valor: string) => void; llenados?: string;
+  clasificaciones: Clasif[]; asignarClasif: (i: number, ids: string[]) => void;
+  crearProveedor?: (t: string) => Promise<Opcion | { error: string }>;
+  crearConcepto?: (t: string) => Promise<Opcion | { error: string }>;
+  crearClasificacion?: (t: string) => Promise<Clasif | { error: string }>;
   setFilas: React.Dispatch<React.SetStateAction<Fila[]>>;
   error?: string; importando: boolean;
   onCuenta: (c: number | null) => void; onCancelar: () => void; onDescartar: () => void; onImportar: () => void;
@@ -446,7 +491,7 @@ function VistaPrevia({
               <th className="px-3 py-2 text-right font-medium">Abono</th>
               <th className="px-3 py-2 font-medium">Estado</th>
               <th className="min-w-48 px-3 py-2 font-medium">A favor de</th>
-              <th className="min-w-48 px-3 py-2 font-medium">Concepto</th>
+              <th className="min-w-48 px-3 py-2 font-medium">Concepto y clasificaciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -481,13 +526,15 @@ function VistaPrevia({
                 </td>
                 <td className="px-3 py-2">
                   <Combobox key={`p${f.indice}-${f.rev ?? 0}`} nombre={`p${f.indice}`} opciones={prov} valorInicial={f.proveedor_id} placeholder="—"
-                    onCambio={(v) => asignar(f.indice, "proveedor_id", v)} />
+                    onCambio={(v) => asignar(f.indice, "proveedor_id", v)} onCrear={crearProveedor} />
                   {f.copiado && f.proveedor_id ? <p className="mt-1 flex items-center gap-1 text-xs text-primary" data-copiado><Copy className="h-3 w-3" aria-hidden /> Igual que otro renglón</p>
                     : f.sugerencia && f.proveedor_id && <p className="mt-1 flex items-center gap-1 text-xs text-primary"><Sparkles className="h-3 w-3" aria-hidden /> Sugerido</p>}
                 </td>
                 <td className="px-3 py-2">
                   <Combobox key={`c${f.indice}-${f.rev ?? 0}`} nombre={`c${f.indice}`} opciones={conc} valorInicial={f.concepto_id} placeholder="—"
-                    onCambio={(v) => asignar(f.indice, "concepto_id", v)} />
+                    onCambio={(v) => asignar(f.indice, "concepto_id", v)} onCrear={crearConcepto} />
+                  <ClasifFila id={`cl${f.indice}`} todas={clasificaciones} elegidas={f.clasificaciones ?? []}
+                    onCambio={(ids) => asignarClasif(f.indice, ids)} onCrear={crearClasificacion} />
                 </td>
               </tr>
             ))}
@@ -654,6 +701,87 @@ function VistaLote({ lote, cuentas, cuentaLote, setCuentaLote, error, onRevisar,
         </button>
       </div>
       {lote.some((x) => x.estado === "listo") && <p className="text-xs text-muted">Los que no revises ahora quedan en &quot;Archivos recientes&quot; como pendientes de importar.</p>}
+    </div>
+  );
+}
+
+// ---------- Clasificaciones de un renglón ----------------------------------------
+function ClasifFila({ id, todas, elegidas, onCambio, onCrear }: {
+  id: string; todas: Clasif[]; elegidas: string[];
+  onCambio: (ids: string[]) => void;
+  onCrear?: (t: string) => Promise<Clasif | { error: string }>;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [nueva, setNueva] = useState("");
+  const [creando, setCreando] = useState(false);
+  const [err, setErr] = useState<string>();
+  const porId = new Map(todas.map((c) => [String(c.id), c]));
+  const visibles = todas.filter((c) => c.activo || elegidas.includes(String(c.id)));
+  const alternar = (cid: string) => onCambio(elegidas.includes(cid) ? elegidas.filter((x) => x !== cid) : [...elegidas, cid]);
+
+  async function agregar() {
+    if (!onCrear || !nueva.trim() || creando) return;
+    setCreando(true); setErr(undefined);
+    const r = await onCrear(nueva);
+    setCreando(false);
+    if ("error" in r) { setErr(r.error); return; }
+    setNueva("");
+    if (!elegidas.includes(String(r.id))) onCambio([...elegidas, String(r.id)]);
+  }
+
+  return (
+    <div className="mt-1.5" data-clasif={id}>
+      <div className="flex flex-wrap items-center gap-1">
+        {elegidas.map((cid) => {
+          const c = porId.get(cid);
+          return c ? (
+            <span key={cid} className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs">
+              <span className="h-2 w-2 rounded-full" style={{ background: c.color }} aria-hidden />{c.nombre}
+            </span>
+          ) : null;
+        })}
+        <button type="button" className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs text-primary hover:bg-primary-soft"
+          aria-expanded={abierto} aria-controls={`${id}-panel`} onClick={() => setAbierto((a) => !a)}>
+          <Tags className="h-3 w-3" aria-hidden /> {elegidas.length ? "Cambiar" : "Clasificar"}
+        </button>
+      </div>
+      {abierto && (
+        // Ventana sobre la página (no se recorta con el desplazamiento de la tabla)
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) setAbierto(false); }}>
+        <div id={`${id}-panel`} role="dialog" aria-modal="true" aria-label="Clasificaciones del movimiento"
+          className="w-full max-w-sm rounded-xl border border-border bg-surface p-4 shadow-xl"
+          onKeyDown={(e) => { if (e.key === "Escape") setAbierto(false); }}>
+          <p className="mb-2 text-sm font-semibold">Clasificaciones</p>
+          <div className="flex max-h-60 flex-wrap gap-1.5 overflow-y-auto">
+            {visibles.length === 0 && <p className="text-xs text-muted">Todavía no hay clasificaciones.</p>}
+            {visibles.map((c) => {
+              const cid = String(c.id);
+              const on = elegidas.includes(cid);
+              return (
+                <button key={cid} type="button" aria-pressed={on} onClick={() => alternar(cid)}
+                  className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs ${on ? "border-primary bg-primary-soft text-primary" : "border-border hover:bg-surface-2"}`}>
+                  <span className="h-2 w-2 rounded-full" style={{ background: c.color }} aria-hidden />{c.nombre}
+                </button>
+              );
+            })}
+          </div>
+          {onCrear && (
+            <div className="mt-2 flex gap-1.5">
+              <label htmlFor={`${id}-nueva`} className="sr-only">Nueva clasificación</label>
+              <input id={`${id}-nueva`} className="input py-1 text-xs" placeholder="Nueva clasificación…" value={nueva}
+                onChange={(e) => setNueva(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); agregar(); } }} />
+              <button type="button" className="btn-secondary px-2 py-1 text-xs" onClick={agregar} disabled={creando || nueva.trim().length < 2}>
+                {creando ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Plus className="h-3.5 w-3.5" aria-hidden />} Agregar
+              </button>
+            </div>
+          )}
+          {err && <p role="alert" className="mt-1 text-xs text-danger">{err}</p>}
+          <div className="mt-3 flex justify-end">
+            <button type="button" className="btn-primary px-3 py-1.5 text-sm" onClick={() => setAbierto(false)}>Listo</button>
+          </div>
+        </div>
+        </div>
+      )}
     </div>
   );
 }

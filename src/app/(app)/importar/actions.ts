@@ -124,7 +124,7 @@ export async function abrirImportacion(id: number, cuentaId?: number | null): Pr
 
 export type FilaAImportar = {
   fecha: string; descripcion: string; detalle: string; contraparte: string | null; referencia: string | null;
-  cargo: number; abono: number; proveedor_id: string; concepto_id: string;
+  cargo: number; abono: number; proveedor_id: string; concepto_id: string; clasificaciones?: string[];
 };
 
 // 3) Crea los movimientos elegidos en la cuenta, con folios consecutivos.
@@ -159,11 +159,15 @@ export async function importarMovimientos(id: number, cuentaId: number, filas: F
     proveedor_id: idOpc(f.proveedor_id),
     concepto_id: idOpc(f.concepto_id),
     importacion_id: id,
+    clasificaciones: [...new Set((f.clasificaciones ?? []).map(Number).filter((n) => Number.isInteger(n) && n > 0))],
   }));
   // De a uno por uno para que cada movimiento tome el siguiente folio de la cuenta
   let importados = 0;
-  for (const r of registros) {
-    const { error } = await supabase.from("transacciones").insert(r);
+  for (const { clasificaciones, ...r } of registros) {
+    const { data: nuevo, error } = await supabase.from("transacciones").insert(r).select("id").single();
+    if (!error && nuevo && clasificaciones.length) {
+      await supabase.from("transaccion_clasificaciones").insert(clasificaciones.map((c) => ({ transaccion_id: nuevo.id, clasificacion_id: c })));
+    }
     if (error) {
       await supabase.from("importaciones").update({ movimientos_importados: importados, cuenta_id: cuentaId, estado: importados ? "importado" : "leido" }).eq("id", id);
       return { error: `Se importaron ${importados} de ${registros.length}; falló uno (${error.message}).`, importados };

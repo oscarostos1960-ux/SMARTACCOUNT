@@ -46,6 +46,7 @@ export type FilaImportacion = MovimientoIA & {
   sugerencia?: string;                             // de dónde salió la sugerencia
   copiado?: boolean;                               // se llenó igual que otro renglón parecido
   rev?: number;                                    // cambia cuando se llena solo (para refrescar la lista)
+  clasificaciones?: string[];                      // ids de clasificaciones elegidas
 };
 
 export type Cuadre = {

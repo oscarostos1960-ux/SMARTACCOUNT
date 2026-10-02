@@ -32,6 +32,7 @@ export default async function ImportarPage() {
       ) : (
         <ImportarVista
           usuarioId={permisos.perfil.id}
+          puedeCrear={permisos.esTitular}
           cuentas={cuentas}
           historial={(impR.data ?? []) as ImportacionResumen[]}
           {...catalogos}
