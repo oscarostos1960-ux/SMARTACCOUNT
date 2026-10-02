@@ -43,7 +43,8 @@ export type FilaImportacion = MovimientoIA & {
   saldoOk: boolean | null;                         // el saldo del banco cuadra con el acumulado
   proveedor_id: string;                            // sugerido (texto vacío = ninguno)
   concepto_id: string;
-  sugerencia?: string;                             // de dónde salió la sugerencia
+  sugerencia?: string;                             // de dónde salió la sugerencia (texto)
+  origen?: "regla" | "nombre" | "historial" | "banco";
   copiado?: boolean;                               // se llenó igual que otro renglón parecido
   rev?: number;                                    // cambia cuando se llena solo (para refrescar la lista)
   clasificaciones?: string[];                      // ids de clasificaciones elegidas

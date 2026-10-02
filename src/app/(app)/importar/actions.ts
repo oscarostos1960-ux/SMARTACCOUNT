@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { obtenerPermisos } from "@/lib/auth";
 import { leerArchivo } from "@/lib/importador/leer";
+import { aprenderReglas, cargarCatalogosSugerencia } from "@/lib/importador/reglas";
 import { armarFilas, ocultarTarjetas, type Existente, type Historico } from "@/lib/importador/analisis";
 import { esquemaEstado, type Analisis, type EstadoIA } from "@/lib/importador/esquema";
 
@@ -76,7 +77,8 @@ async function construirAnalisis(supabase: Supa, imp: {
   }
 
   const regla = await reglaBanco(supabase, datos.banco, cuentaId);
-  const { filas, cuadre } = armarFilas(datos, existentes, historial, regla);
+  const catalogos = await cargarCatalogosSugerencia(supabase);
+  const { filas, cuadre } = armarFilas(datos, existentes, historial, regla, catalogos);
   let yaImportado: string | undefined;
   if (imp.archivo_huella) {
     const { data } = await supabase.from("importaciones").select("id, created_at, movimientos_importados")
@@ -175,6 +177,13 @@ export async function importarMovimientos(id: number, cuentaId: number, filas: F
     importados++;
   }
   await supabase.from("importaciones").update({ estado: "importado", cuenta_id: cuentaId, movimientos_importados: importados }).eq("id", id);
+  // Cada comercio clasificado queda como regla para la próxima vez (sin frenar la importación si falla)
+  try {
+    await aprenderReglas(supabase, ordenadas.map((f) => ({
+      descripcion: f.descripcion, contraparte: f.contraparte, cargo: num(f.cargo), abono: num(f.abono),
+      proveedor_id: idOpc(f.proveedor_id), concepto_id: idOpc(f.concepto_id),
+    })));
+  } catch { /* las reglas son una ayuda; la importación ya quedó */ }
   // La cuenta "aprende" su terminación para reconocerla sola la próxima vez
   if (imp.terminacion && permisos.esTitular) {
     await supabase.from("cuentas").update({ terminacion: imp.terminacion }).eq("id", cuentaId).is("terminacion", null);

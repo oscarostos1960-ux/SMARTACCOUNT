@@ -27,6 +27,7 @@ export type Catalogo = {
   orden: string;
   busqueda: string[];          // columnas donde buscar
   campos: Campo[];
+  accion?: { href: string; texto: string };   // botón extra en el encabezado
 };
 
 export const CATALOGOS: Catalogo[] = [
@@ -69,6 +70,8 @@ export const CATALOGOS: Catalogo[] = [
       { nombre: "celular", etiqueta: "Celular (WhatsApp)", tipo: "celular", ayuda: "10 dígitos", enTabla: true, ancho: "medio" },
       { nombre: "notificar_whatsapp", etiqueta: "Avisar por WhatsApp al pagar", tipo: "booleano", porDefecto: true, ancho: "medio" },
       { nombre: "notificar_correo", etiqueta: "Avisar por correo al pagar", tipo: "booleano", porDefecto: true, ancho: "medio" },
+      { nombre: "palabras_clave", etiqueta: "Otros nombres en el estado de cuenta", tipo: "texto", ayuda: "Separados por coma, p. ej. GNP, TELMEX. Sirven para reconocerlo al importar." },
+      { nombre: "concepto_id", etiqueta: "Concepto habitual", tipo: "referencia", referencia: { tabla: "conceptos", etiqueta: "nombre" }, ayuda: "Se sugiere al importar sus movimientos" },
       { nombre: "notas", etiqueta: "Notas", tipo: "textoLargo" },
     ],
   },
@@ -96,6 +99,26 @@ export const CATALOGOS: Catalogo[] = [
       { nombre: "nombre", etiqueta: "Nombre", tipo: "texto", requerido: true, enTabla: true },
       { nombre: "color", etiqueta: "Color", tipo: "color", porDefecto: "#1F3A5F", enTabla: true, ancho: "medio" },
       { nombre: "descripcion", etiqueta: "Descripción", tipo: "textoLargo", enTabla: true },
+    ],
+  },
+  {
+    clave: "reglas",
+    tabla: "reglas_clasificacion",
+    titulo: "Reglas de clasificación",
+    singular: "regla",
+    descripcion: "Cada comercio se clasifica siempre igual al importar. Se crean solas al importar y aquí puedes corregirlas.",
+    campoActivo: "activa",
+    orden: "clave",
+    busqueda: ["clave"],
+    accion: { href: "/catalogos/proponer-reglas", texto: "Proponer reglas desde el historial" },
+    campos: [
+      { nombre: "clave", etiqueta: "Comercio (como aparece en el estado)", tipo: "texto", requerido: true, enTabla: true, ayuda: "El nombre limpio, p. ej. UBER, AMAZON DIGITAL, TELMEX" },
+      {
+        nombre: "tipo", etiqueta: "Aplica a", tipo: "opciones", requerido: true, porDefecto: "cargo", enTabla: true, ancho: "medio",
+        opciones: [{ valor: "cargo", etiqueta: "Cargos" }, { valor: "abono", etiqueta: "Abonos" }, { valor: "ambos", etiqueta: "Cargos y abonos" }],
+      },
+      { nombre: "proveedor_id", etiqueta: "A favor de", tipo: "referencia", referencia: { tabla: "v_proveedores_etiqueta", etiqueta: "etiqueta" }, enTabla: true, ancho: "medio" },
+      { nombre: "concepto_id", etiqueta: "Concepto", tipo: "referencia", referencia: { tabla: "conceptos", etiqueta: "nombre" }, enTabla: true, ancho: "medio" },
     ],
   },
   {

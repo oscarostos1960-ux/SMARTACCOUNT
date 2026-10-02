@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
   Home, ArrowLeftRight, FileSearch, CalendarClock, Upload, BarChart3, Landmark, Users, Tag, Tags,
-  Building2, Coins, Layers, ShieldCheck, Menu, X, LogOut,
+  Building2, Coins, Layers, ShieldCheck, Menu, X, LogOut, Wand2,
 } from "lucide-react";
 import Logo from "./Logo";
 
@@ -29,6 +29,7 @@ const SECCIONES: { titulo?: string; items: Item[]; soloTitular?: boolean }[] = [
       { href: "/catalogos/proveedores", texto: "Proveedores", icono: Users },
       { href: "/catalogos/conceptos", texto: "Conceptos", icono: Tag },
       { href: "/catalogos/clasificaciones", texto: "Clasificaciones", icono: Tags },
+      { href: "/catalogos/reglas", texto: "Reglas de clasificación", icono: Wand2 },
       { href: "/catalogos/bancos", texto: "Bancos", icono: Building2 },
       { href: "/catalogos/monedas", texto: "Monedas", icono: Coins },
       { href: "/catalogos/tipos-cuenta", texto: "Tipos de cuenta", icono: Layers },

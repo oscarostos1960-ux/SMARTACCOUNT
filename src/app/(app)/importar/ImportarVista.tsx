@@ -373,6 +373,8 @@ export default function ImportarVista({ usuarioId, cuentas, historial, conceptos
 }
 
 // ---------- Vista previa ----------------------------------------------------------
+// De dónde salió la sugerencia (de más a menos confiable)
+const ORIGEN: Record<string, string> = { regla: "Por regla", banco: "Cargo del banco", nombre: "Por nombre", historial: "Parecido a otros" };
 const FECHA_OK = (f: string) => /^\d{4}-\d{2}-\d{2}$/.test(f) && !Number.isNaN(Date.parse(f));
 const elegidas_ = (fs: Fila[]) => fs.filter((f) => f.incluir);
 
@@ -528,7 +530,11 @@ function VistaPrevia({
                   <Combobox key={`p${f.indice}-${f.rev ?? 0}`} nombre={`p${f.indice}`} opciones={prov} valorInicial={f.proveedor_id} placeholder="—"
                     onCambio={(v) => asignar(f.indice, "proveedor_id", v)} onCrear={crearProveedor} />
                   {f.copiado && f.proveedor_id ? <p className="mt-1 flex items-center gap-1 text-xs text-primary" data-copiado><Copy className="h-3 w-3" aria-hidden /> Igual que otro renglón</p>
-                    : f.sugerencia && f.proveedor_id && <p className="mt-1 flex items-center gap-1 text-xs text-primary"><Sparkles className="h-3 w-3" aria-hidden /> Sugerido</p>}
+                    : f.sugerencia && (f.proveedor_id || f.concepto_id) && (
+                      <p className={`mt-1 flex items-center gap-1 text-xs ${f.origen === "historial" ? "text-muted" : "text-primary"}`} title={f.sugerencia} data-origen={f.origen}>
+                        <Sparkles className="h-3 w-3" aria-hidden /> {ORIGEN[f.origen ?? "historial"]}
+                      </p>
+                    )}
                 </td>
                 <td className="px-3 py-2">
                   <Combobox key={`c${f.indice}-${f.rev ?? 0}`} nombre={`c${f.indice}`} opciones={conc} valorInicial={f.concepto_id} placeholder="—"

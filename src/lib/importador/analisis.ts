@@ -1,6 +1,7 @@
 // Análisis de los movimientos leídos: cuadre de saldos, duplicados y sugerencias.
 // Funciones puras (sin base de datos) para poder probarlas.
 import type { Cuadre, EstadoIA, FilaImportacion, MovimientoIA } from "./esquema";
+import { prepararNombres, sugerirMovimiento, type ProveedorCat, type Regla, type Sugerencia } from "./sugerencias";
 
 export type Existente = { id: number; folio: number; fecha: string; cargo: number; abono: number };
 export type Historico = { texto: string; proveedor_id: number | null; concepto_id: number | null };
@@ -123,8 +124,8 @@ export function sugerir(movs: MovimientoIA[], historial: Historico[]) {
 // ---------- Todo junto: filas de la vista previa ----------
 // ---------- Comisiones: siempre a favor del banco que las cobra ----------
 export type ReglaBanco = { proveedorBanco: number | null; conceptoComision: number | null };
-const ES_COMISION = /COMISI|\bCOM\b|ANUALIDAD/;
-const ES_CARGO_DEL_BANCO = /COMISI|\bCOM\b|ANUALIDAD|INTERES/;   // "IVA" solo no: puede ser un pago de impuestos
+const ES_COMISION = /COMISI|\bCOM\b|ANUALIDAD|COBRANZA/;
+const ES_CARGO_DEL_BANCO = /COMISI|\bCOM\b|ANUALIDAD|COBRANZA|INTERES/;   // "IVA" solo no: puede ser un pago de impuestos
 // Un abono con la palabra "comisión" suele ser un ingreso (p. ej. comisiones de una aseguradora), no un cobro del banco
 const esCargo = (m: Pick<MovimientoIA, "cargo" | "abono">) => m.abono === 0;
 export function esComisionBancaria(m: Pick<MovimientoIA, "descripcion" | "cargo" | "abono">, conceptoId: number | null, regla: ReglaBanco) {
@@ -132,23 +133,37 @@ export function esComisionBancaria(m: Pick<MovimientoIA, "descripcion" | "cargo"
   return esCargo(m) && ES_COMISION.test(normal(m.descripcion));
 }
 
-export function armarFilas(datos: EstadoIA, existentes: Existente[], historial: Historico[], regla: ReglaBanco = { proveedorBanco: null, conceptoComision: null }) {
+export type CatalogosSugerencia = { reglas: Regla[]; proveedores: ProveedorCat[]; conceptoHabitual: Map<number, number> };
+
+export function armarFilas(
+  datos: EstadoIA, existentes: Existente[], historial: Historico[],
+  regla: ReglaBanco = { proveedorBanco: null, conceptoComision: null },
+  catalogos: CatalogosSugerencia = { reglas: [], proveedores: [], conceptoHabitual: new Map() },
+) {
   const { cuadre, saldosOk } = cuadrar(datos);
   const dups = buscarDuplicados(datos.movimientos, existentes);
-  const sugs = sugerir(datos.movimientos, historial);
-  const filas: FilaImportacion[] = datos.movimientos.map((m, i) => aplicarReglaBanco({
-    ...m,
-    descripcion: ocultarTarjetas(m.descripcion) ?? "",
-    detalle: ocultarTarjetas(m.detalle) ?? "",
-    referencia: ocultarTarjetas(m.referencia),
-    indice: i,
-    estado: dups[i]?.estado ?? "nuevo",
-    coincide: dups[i] ? { folio: dups[i]!.folio, fecha: dups[i]!.fecha } : undefined,
-    saldoOk: saldosOk[i],
-    proveedor_id: sugs[i]?.proveedor_id ? String(sugs[i]!.proveedor_id) : "",
-    concepto_id: sugs[i]?.concepto_id ? String(sugs[i]!.concepto_id) : "",
-    sugerencia: sugs[i] ? `Parecido ${Math.round(sugs[i]!.puntaje * 100)}% a movimientos anteriores` : undefined,
-  }, regla));
+  const porHistorial = sugerir(datos.movimientos, historial).map((h): Sugerencia | null => h && {
+    proveedor_id: h.proveedor_id, concepto_id: h.concepto_id, origen: "historial",
+    detalle: `Parecido ${Math.round(h.puntaje * 100)}% a movimientos anteriores`,
+  });
+  const ctx = { reglas: catalogos.reglas, candidatos: prepararNombres(catalogos.proveedores), conceptoHabitual: catalogos.conceptoHabitual, historial: porHistorial };
+  const filas: FilaImportacion[] = datos.movimientos.map((m, i) => {
+    const s = sugerirMovimiento(m, i, ctx);
+    return aplicarReglaBanco({
+      ...m,
+      descripcion: ocultarTarjetas(m.descripcion) ?? "",
+      detalle: ocultarTarjetas(m.detalle) ?? "",
+      referencia: ocultarTarjetas(m.referencia),
+      indice: i,
+      estado: dups[i]?.estado ?? "nuevo",
+      coincide: dups[i] ? { folio: dups[i]!.folio, fecha: dups[i]!.fecha } : undefined,
+      saldoOk: saldosOk[i],
+      proveedor_id: s?.proveedor_id ? String(s.proveedor_id) : "",
+      concepto_id: s?.concepto_id ? String(s.concepto_id) : "",
+      sugerencia: s?.detalle,
+      origen: s?.origen,
+    }, regla);
+  });
   return { filas, cuadre };
 }
 
@@ -176,13 +191,16 @@ export function esParecido(a: Comparable, b: Comparable) {
 // (aunque en otras cuentas se haya usado otro banco). A las comisiones además se les pone el concepto Comisión bancaria.
 export function aplicarReglaBanco(f: FilaImportacion, regla: ReglaBanco): FilaImportacion {
   if (!regla.proveedorBanco) return f;
-  const comision = esComisionBancaria(f, f.concepto_id ? Number(f.concepto_id) : null, regla);
+  // El concepto solo cuenta si lo enseñó el usuario (regla); uno sugerido por "concepto habitual" no basta
+  const conceptoSeguro = f.origen === "regla" && f.concepto_id ? Number(f.concepto_id) : null;
+  const comision = esComisionBancaria(f, conceptoSeguro, regla);
   if (!comision && !(esCargo(f) && ES_CARGO_DEL_BANCO.test(normal(f.descripcion)))) return f;
   return {
     ...f,
     proveedor_id: String(regla.proveedorBanco),
     concepto_id: f.concepto_id || (comision && regla.conceptoComision ? String(regla.conceptoComision) : ""),
     sugerencia: "Cargo del banco: a favor del banco que lo cobra",
+    origen: "banco",
   };
 }
 
@@ -210,4 +228,29 @@ export function completarCargosDelResumen(datos: EstadoIA): EstadoIA {
     });
   }
   return extra.length ? { ...datos, movimientos: [...datos.movimientos, ...extra] } : datos;
+}
+
+// ---------- Mensualidades de meses sin intereses que sobran ----------
+// En algunos formatos (p. ej. Scotiabank anterior) la compra a meses ya se sumó completa el mes en que se hizo,
+// y la tabla de "plazo fijo" solo informa la mensualidad. Si la IA las registró como cargo y por eso el estado
+// no cuadra, se quitan las que sobran (solo si quitándolas cuadra exacto).
+const ES_MENSUALIDAD = /PAGO FIJO|MENSUALIDAD|\bMSI\b|MESES SIN INTERESES|PLAZO FIJO/;
+export function quitarMensualidadesSobrantes(datos: EstadoIA): EstadoIA {
+  if (datos.tipo_producto !== "tarjeta_credito") return datos;
+  const { cuadre } = cuadrar(datos);
+  if (!cuadre.aplica || cuadre.ok || cuadre.diferencia === null || cuadre.diferencia >= 0) return datos;
+  const sobra = -cuadre.diferencia;   // hay cargos de más
+  const candidatos = datos.movimientos.map((m, i) => ({ m, i })).filter(({ m }) => m.cargo > 0 && ES_MENSUALIDAD.test(normal(`${m.descripcion} ${m.detalle}`)));
+  if (!candidatos.length || candidatos.length > 12) return datos;
+  // Busca la combinación de mensualidades que suma exactamente lo que sobra
+  for (let mask = (1 << candidatos.length) - 1; mask > 0; mask--) {
+    let suma = 0;
+    candidatos.forEach((c, k) => { if (mask & (1 << k)) suma += c.m.cargo; });
+    if (Math.abs(redondea(suma) - sobra) < 0.015) {
+      const quitar = new Set(candidatos.filter((_, k) => mask & (1 << k)).map((c) => c.i));
+      const notas = [datos.notas, `Se quitaron ${quitar.size} mensualidad(es) de meses sin intereses que el banco ya había sumado completas en el mes de la compra.`].filter(Boolean).join(" ");
+      return { ...datos, movimientos: datos.movimientos.filter((_, i) => !quitar.has(i)), notas };
+    }
+  }
+  return datos;
 }

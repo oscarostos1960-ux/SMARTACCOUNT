@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { obtenerPerfil } from "@/lib/auth";
@@ -52,10 +53,13 @@ export default async function CatalogoPage(props: PageProps<"/catalogos/[catalog
 
   return (
     <div className="mx-auto max-w-6xl">
-      <header className="mb-6">
-        <p className="text-sm font-medium text-muted">Catálogos</p>
-        <h1 className="text-2xl font-semibold tracking-tight">{catalogo.titulo}</h1>
-        <p className="mt-1 text-sm text-muted">{catalogo.descripcion}</p>
+      <header className="mb-6 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-muted">Catálogos</p>
+          <h1 className="text-2xl font-semibold tracking-tight">{catalogo.titulo}</h1>
+          <p className="mt-1 text-sm text-muted">{catalogo.descripcion}</p>
+        </div>
+        {catalogo.accion && perfil.rol === "titular" && <Link href={catalogo.accion.href} className="btn-secondary">{catalogo.accion.texto}</Link>}
       </header>
       {error ? (
         <p className="card p-6 text-sm text-danger">No se pudo cargar la información: {error.message}</p>
