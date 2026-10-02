@@ -182,3 +182,29 @@ export function aplicarReglaBanco(f: FilaImportacion, regla: ReglaBanco): FilaIm
     sugerencia: "Cargo del banco: a favor del banco que lo cobra",
   };
 }
+
+// ---------- Cargos del banco que solo vienen en el resumen ----------
+// Algunas tarjetas (p. ej. Scotiabank) muestran intereses e IVA solo en el resumen y no en el detalle.
+// Si el resumen trae un importe que no está entre los movimientos, se agrega como cargo con la fecha de corte.
+export function completarCargosDelResumen(datos: EstadoIA): EstadoIA {
+  const r = datos.resumen_cargos;
+  if (!r || datos.tipo_producto !== "tarjeta_credito") return datos;
+  const fecha = datos.periodo_fin ?? datos.movimientos.at(-1)?.fecha ?? "";
+  const n = (m: MovimientoIA) => normal(`${m.descripcion} ${m.detalle}`);
+  const grupos: [number | null, (m: MovimientoIA) => boolean, string][] = [
+    [r.intereses, (m) => /INTERES/.test(n(m)) && !/\bIVA\b/.test(n(m)), "INTERESES DEL PERIODO"],
+    [r.comisiones, (m) => /COMISI|COBRANZA|ANUALIDAD|\bCOM\b/.test(n(m)) && !/\bIVA\b/.test(n(m)), "COMISIONES DEL PERIODO"],
+    [r.iva, (m) => /\bIVA\b/.test(n(m)), "IVA DE INTERESES Y COMISIONES"],
+  ];
+  const extra: MovimientoIA[] = [];
+  for (const [total, es, nombre] of grupos) {
+    if (!total || total <= 0) continue;
+    const ya = redondea(datos.movimientos.filter((m) => m.cargo > 0 && es(m)).reduce((s, m) => s + m.cargo, 0));
+    const falta = redondea(total - ya);
+    if (falta >= 0.01) extra.push({
+      fecha, descripcion: nombre, detalle: `${nombre} (tomado del resumen del estado de cuenta)`,
+      contraparte: null, referencia: null, cargo: falta, abono: 0, saldo: null,
+    });
+  }
+  return extra.length ? { ...datos, movimientos: [...datos.movimientos, ...extra] } : datos;
+}

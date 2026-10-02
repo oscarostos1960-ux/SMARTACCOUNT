@@ -24,6 +24,11 @@ export const esquemaEstado = z.object({
     abono: z.number().describe("Importe que entra o que reduce la deuda (depósitos, pagos a la tarjeta, bonificaciones, intereses a favor). 0 si no aplica"),
     saldo: z.number().nullable().describe("Saldo que muestra el banco después del movimiento, si aparece"),
   })),
+  resumen_cargos: z.object({
+    intereses: z.number().nullable().describe("Intereses cargados en el periodo según el resumen (0 si no hay)"),
+    comisiones: z.number().nullable().describe("Comisiones cargadas en el periodo según el resumen (0 si no hay)"),
+    iva: z.number().nullable().describe("IVA de intereses y comisiones del periodo según el resumen (0 si no hay)"),
+  }).nullable().optional().describe("Solo tarjetas de crédito: los cargos del banco que muestra el resumen del periodo"),
   notas: z.string().nullable().describe("Advertencias: páginas ilegibles, secciones dudosas, compras a meses, etc."),
 });
 
