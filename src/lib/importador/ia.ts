@@ -24,7 +24,7 @@ Reglas:
 - "contraparte": nombre del ordenante, beneficiario o comercio, si aparece.
 - Nunca escribas números completos de tarjeta; para la cuenta y la CLABE da solo los últimos 4 dígitos.
 - saldo_inicial y saldo_final: tal como los muestra el banco.
-  - En tarjeta de crédito: saldo_inicial = "Adeudo del periodo anterior" (o saldo anterior); saldo_final = el resultado del resumen de cargos y abonos del periodo (adeudo anterior + cargos − abonos), que normalmente es el "Pago para no generar intereses". No uses el "saldo deudor total" si incluye compras a meses que todavía no se cobran.
+  - En tarjeta de crédito: saldo_inicial = "Saldo anterior" o "Adeudo del periodo anterior"; saldo_final = el renglón "=" del resumen de cargos y abonos del periodo, que es exactamente saldo anterior + cargos − abonos según ese mismo resumen. Según el banco se llama "Saldo Final" o "Pago para no generar intereses": usa el que sea el resultado de esa suma, aunque exista otro dato parecido (si "Pago para no generar intereses" no coincide con esa suma, NO lo uses).
   - Compras a meses (MSI): regístralas como las suma el resumen del banco, para que cuadre.
     - Si el banco suma la compra COMPLETA en el consumo del mes en que se hizo (y luego solo la muestra en una tabla de "plazo fijo" / "meses sin intereses" con el "pago fijo del mes"), registra la compra completa ese mes y NO registres las mensualidades de esa tabla, ni este mes ni los siguientes: ya forman parte del saldo.
     - Si el resumen suma solo la mensualidad de cada mes (p. ej. "Cargos y compras a meses (capital)"), registra la mensualidad del mes como cargo.
