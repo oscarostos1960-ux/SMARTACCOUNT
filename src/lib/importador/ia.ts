@@ -25,7 +25,9 @@ Reglas:
 - Nunca escribas números completos de tarjeta; para la cuenta y la CLABE da solo los últimos 4 dígitos.
 - saldo_inicial y saldo_final: tal como los muestra el banco.
   - En tarjeta de crédito: saldo_inicial = "Adeudo del periodo anterior" (o saldo anterior); saldo_final = el resultado del resumen de cargos y abonos del periodo (adeudo anterior + cargos − abonos), que normalmente es el "Pago para no generar intereses". No uses el "saldo deudor total" si incluye compras a meses que todavía no se cobran.
-  - Las mensualidades de compras a meses que sí se cargaron en este periodo van como movimientos de cargo.
+  - Compras a meses (MSI): regístralas como las suma el resumen del banco, para que cuadre.
+    - Si el banco suma la compra COMPLETA en el consumo del mes en que se hizo (y luego solo la muestra en una tabla de "plazo fijo" / "meses sin intereses" con el "pago fijo del mes"), registra la compra completa ese mes y NO registres las mensualidades de esa tabla, ni este mes ni los siguientes: ya forman parte del saldo.
+    - Si el resumen suma solo la mensualidad de cada mes (p. ej. "Cargos y compras a meses (capital)"), registra la mensualidad del mes como cargo.
   - Intereses, comisiones e IVA del periodo SIEMPRE van como movimientos de cargo. Muchos bancos no los ponen en el detalle de operaciones sino solo en el resumen o en una sección aparte (p. ej. "Detalle de comisiones"): en ese caso agrégalos tú como movimientos con la fecha de corte ("INTERESES DEL PERIODO", "COMISIONES DEL PERIODO", "IVA DE INTERESES Y COMISIONES"), sin duplicar los que ya aparezcan como renglón. Llena también "resumen_cargos" con los importes del resumen.
 - Si algo no se lee bien, dilo en "notas".`;
 
