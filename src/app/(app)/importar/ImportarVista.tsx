@@ -62,8 +62,17 @@ export default function ImportarVista({ usuarioId, cuentas, historial, conceptos
   const entrada = useRef<HTMLInputElement>(null);
   const nombreCuenta = useMemo(() => new Map(cuentas.map((c) => [c.cuenta_id, c])), [cuentas]);
 
-  function mostrar(a: Analisis) {
-    setFilas(a.filas.map((f) => ({ ...f, incluir: f.estado === "nuevo" })));
+  function mostrar(a: Analisis, previas?: Fila[]) {
+    const antes = new Map((previas ?? []).map((f) => [f.indice, f]));
+    setFilas(a.filas.map((f) => {
+      const v = antes.get(f.indice);
+      // Al cambiar de cuenta se conservan las correcciones que ya hizo el usuario
+      const base = v ? {
+        ...f, fecha: v.fecha, descripcion: v.descripcion, cargo: v.cargo, abono: v.abono,
+        proveedor_id: v.proveedor_id || f.proveedor_id, concepto_id: v.concepto_id || f.concepto_id,
+      } : f;
+      return { ...base, incluir: f.estado === "nuevo" };
+    }));
     setVersion((v) => v + 1);
     setFase({ tipo: "vista", analisis: a });
   }
@@ -90,9 +99,10 @@ export default function ImportarVista({ usuarioId, cuentas, historial, conceptos
   async function reabrir(id: number, cuentaId?: number | null) {
     setError(undefined);
     setFase({ tipo: "trabajando", mensaje: cuentaId === undefined ? "Abriendo…" : "Revisando duplicados en la cuenta…" });
+    const previas = cuentaId === undefined ? undefined : filas;
     const r = await abrirImportacion(id, cuentaId);
     if (r.error || !r.analisis) { setError(r.error ?? "No se pudo abrir."); setFase({ tipo: "inicio" }); return; }
-    mostrar(r.analisis);
+    mostrar(r.analisis, previas);
   }
 
   const cambiar = (i: number, cambios: Partial<Fila>) => setFilas((fs) => fs.map((f) => (f.indice === i ? { ...f, ...cambios } : f)));
@@ -256,7 +266,7 @@ function VistaPrevia({
         </div>
         <div>
           <label htmlFor="imp-cuenta" className="label">Cuenta donde se importan</label>
-          <select id="imp-cuenta" className="input" value={analisis.cuentaId ?? ""} onChange={(e) => onCuenta(e.target.value ? Number(e.target.value) : null)}>
+          <select id="imp-cuenta" className={`input ${analisis.cuentaId ? "" : "border-danger"}`} value={analisis.cuentaId ?? ""} onChange={(e) => onCuenta(e.target.value ? Number(e.target.value) : null)}>
             <option value="">Elige la cuenta…</option>
             {cuentas.map((x) => <option key={x.cuenta_id} value={x.cuenta_id}>{x.nombre} ({x.moneda})</option>)}
           </select>
@@ -377,6 +387,11 @@ function VistaPrevia({
               cargos {dinero(elegidas.reduce((s, f) => s + f.cargo, 0), moneda)} · abonos {dinero(elegidas.reduce((s, f) => s + f.abono, 0), moneda)}
             </span>
           </p>
+          {!importando && (!analisis.cuentaId || fechaMala > 0 || !elegidas.length) && (
+            <p className="text-sm font-medium text-danger" data-motivo>
+              {!analisis.cuentaId ? "Elige arriba la cuenta donde se importan." : fechaMala > 0 ? "Corrige las fechas marcadas en rojo." : "Marca al menos un movimiento."}
+            </p>
+          )}
           <div className="ml-auto flex flex-wrap gap-2">
             <button className="btn-ghost" onClick={onCancelar} disabled={importando}><RotateCcw className="h-4 w-4" aria-hidden /> Después</button>
             <button className="btn-ghost text-danger" onClick={onDescartar} disabled={importando}><Trash2 className="h-4 w-4" aria-hidden /> Descartar</button>

@@ -122,6 +122,10 @@ export async function abrirImportacion(id: number, cuentaId?: number | null): Pr
   if (!parsed.success) return { error: "La lectura guardada no es válida." };
   const elegida = cuentaId === undefined ? (imp.cuenta_id ? Number(imp.cuenta_id) : null) : cuentaId;
   if (elegida && !permisos.puedeEditar(elegida)) return { error: "No tienes permiso para capturar en esa cuenta." };
+  // Recordar la cuenta elegida para que al "Continuar" después siga seleccionada
+  if (cuentaId !== undefined && imp.estado === "leido") {
+    await supabase.from("importaciones").update({ cuenta_id: cuentaId }).eq("id", id);
+  }
   const analisis = await construirAnalisis(supabase, { ...imp, id: Number(imp.id), datos: parsed.data } as never, elegida, cuentaId === undefined && !!imp.cuenta_id);
   return { analisis };
 }
