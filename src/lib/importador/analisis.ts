@@ -76,6 +76,9 @@ const VACIAS = new Set([
   "PAGO", "PAGOS", "RECIBIDO", "ENVIO", "ENV", "TRANSFERENCIA", "TRANS", "SPEI", "INTERBANCARIO", "INT", "REF", "CTA",
   "RASTREO", "CLAVE", "BENEF", "ORDEN", "ORDENANTE", "BENEFICIARIO", "DATO", "NO", "VERIFICADO", "ESTA", "INSTITUCION",
   "MISMO", "DIA", "SUC", "CAJA", "AUT", "HORA", "BANCO", "MEXICO", "CARGO", "ABONO", "DEPOSITO", "RETIRO",
+  // Ciudades, países, monedas y partes de direcciones web: aparecen en compras de comercios muy distintos
+  "CIUDAD", "MEX", "CDMX", "MX", "MEXI", "COM", "WWW", "HTTP", "HTTPS", "USD", "EUR", "MXN", "CAN", "USA",
+  "MONTERREY", "GUADALAJARA", "TLALPAN", "NAUCALPAN", "PARIS", "CEDEX", "FRA", "MOUNTAIN", "VIEW",
 ]);
 export function palabras(texto: string) {
   return [...new Set(
