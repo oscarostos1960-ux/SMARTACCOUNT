@@ -16,7 +16,7 @@ Reglas:
   - Cuenta de cheques/ahorro/débito: retiros = cargo; depósitos = abono.
   - Tarjeta de crédito: compras, comisiones, intereses e IVA = cargo; pagos a la tarjeta, devoluciones, reembolsos, cancelaciones y bonificaciones = abono.
   - Si el estado marca cada importe con "+" o "-" (o con columnas de cargos y abonos), respeta esa marca: "+" es cargo y "-" es abono, aunque la descripción sea de una compra (p. ej. una devolución de AMAZON con "-" es abono).
-- Tarjetas de crédito con tarjetas adicionales: incluye los movimientos de TODAS las tarjetas (titular y adicionales). En los de una adicional, termina el "detalle" con "· Tarjeta adicional ****1234" (solo sus últimos 4 dígitos). La "terminacion" del estado es la de la tarjeta titular.
+- Tarjetas de crédito con tarjetas adicionales: incluye los movimientos de TODAS las tarjetas (titular y adicionales). En los de una adicional, termina el "detalle" con "· Tarjeta adicional ****1234" (solo sus últimos 4 dígitos). La "terminacion" del estado es la de la tarjeta titular. En TODOS los movimientos llena "tarjeta" con los últimos 4 dígitos de la tarjeta de su sección (p. ej. "Tarjeta Titular XXXX1117" → "1117", "Tarjeta Adicional XXXX2016" → "2016", también tarjetas digitales).
 - En tarjetas de crédito usa la fecha de operación (no la de cargo o aplicación).
 - Fechas en formato AAAA-MM-DD; si el estado solo trae día y mes, usa el año del periodo.
 - "descripcion": el concepto principal en pocas palabras (máx. 80 caracteres).

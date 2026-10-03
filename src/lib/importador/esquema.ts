@@ -23,6 +23,8 @@ export const esquemaEstado = z.object({
     cargo: z.number().describe("Importe que sale o que aumenta la deuda (retiros, pagos a terceros, compras, comisiones, IVA). 0 si no aplica"),
     abono: z.number().describe("Importe que entra o que reduce la deuda (depósitos, pagos a la tarjeta, bonificaciones, intereses a favor). 0 si no aplica"),
     saldo: z.number().nullable().describe("Saldo que muestra el banco después del movimiento, si aparece"),
+    tarjeta: z.string().nullable().optional()
+      .describe("Solo tarjetas de crédito: últimos 4 dígitos de la tarjeta (titular, adicional o digital) que hizo el movimiento, según el encabezado de su sección. null en cargos del banco sin tarjeta"),
   })),
   resumen_cargos: z.object({
     intereses: z.number().nullable().describe("Intereses cargados en el periodo según el resumen (0 si no hay)"),

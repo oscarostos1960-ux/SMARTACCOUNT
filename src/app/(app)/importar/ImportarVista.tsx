@@ -205,14 +205,18 @@ export default function ImportarVista({ usuarioId, cuentas, historial, conceptos
 
   // Al elegir "A favor de" o "Concepto", se llenan igual los renglones parecidos que estén vacíos
   // Clasificaciones de un renglón; los parecidos sin clasificar reciben las mismas
+  // Las clasificaciones de tarjeta ("SCOTIA ADICIONAL 2016 SOFI") son de cada renglón: no se copian a los parecidos
   function asignarClasif(i: number, ids: string[]) {
     const origen = filas.find((f) => f.indice === i);
+    const deTarjeta = new Set(clasificaciones.filter((c) => /(?<!\d)\d{4}(?!\d)/.test(c.nombre)).map((c) => String(c.id)));
+    const copiables = ids.filter((id) => !deTarjeta.has(id));
     let n = 0;
     setFilas(filas.map((f) => {
       if (f.indice === i) return { ...f, clasificaciones: ids };
-      if (!ids.length || !origen || (f.clasificaciones ?? []).length || !esParecido(origen, f)) return f;
+      const propias = f.clasificaciones ?? [];
+      if (!copiables.length || !origen || propias.some((id) => !deTarjeta.has(id)) || !esParecido(origen, f)) return f;
       n++;
-      return { ...f, clasificaciones: ids };
+      return { ...f, clasificaciones: [...propias, ...copiables] };
     }));
     setLlenados(n ? `Se clasificaron igual ${n} renglón(es) parecido(s). Revísalos antes de importar.` : undefined);
   }

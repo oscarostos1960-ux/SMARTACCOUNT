@@ -13,6 +13,15 @@ export async function cargarCatalogosSugerencia(supabase: Supa): Promise<Catalog
     supabase.from("v_concepto_habitual").select("proveedor_id, concepto_id").limit(5000),
     supabase.from("conceptos").select("id, nombre").limit(5000),
   ]);
+  // Clasificaciones con los 4 dígitos de una tarjeta en el nombre ("SCOTIA ADICIONAL 2016 SOFI"): se ponen solas
+  const { data: cl } = await supabase.from("clasificaciones").select("id, nombre").eq("activo", true).limit(2000);
+  const clasifPorTarjeta = new Map<string, number>();
+  const repetidas = new Set<string>();
+  for (const c of (cl ?? []) as { id: number; nombre: string }[]) {
+    const nums = c.nombre.match(/(?<!\d)\d{4}(?!\d)/g) ?? [];
+    for (const n of nums) { if (clasifPorTarjeta.has(n)) repetidas.add(n); else clasifPorTarjeta.set(n, Number(c.id)); }
+  }
+  for (const n of repetidas) clasifPorTarjeta.delete(n);   // dos clasificaciones con el mismo número: no se adivina
   // Conceptos comodín del sistema anterior ("?") no se sugieren
   const comodin = new Set(((kR.data ?? []) as { id: number; nombre: string }[]).filter((c) => ["?", "-", "SIN CONCEPTO"].includes(c.nombre.trim().toUpperCase())).map((c) => Number(c.id)));
   type P = { id: number; nombre: string; apellido_paterno: string | null; apellido_materno: string | null; razon_social: string | null; palabras_clave: string | null; concepto_id: number | null; activo: boolean };
@@ -30,7 +39,7 @@ export async function cargarCatalogosSugerencia(supabase: Supa): Promise<Catalog
   const conceptoHabitual = new Map(((cR.data ?? []) as { proveedor_id: number; concepto_id: number }[])
     .filter((c) => !comodin.has(Number(c.concepto_id)))
     .map((c) => [Number(c.proveedor_id), Number(c.concepto_id)]));
-  return { reglas, proveedores, conceptoHabitual };
+  return { reglas, proveedores, conceptoHabitual, clasifPorTarjeta };
 }
 
 type Aprendible = { descripcion: string; contraparte: string | null; cargo: number; abono: number; proveedor_id: number | null; concepto_id: number | null };

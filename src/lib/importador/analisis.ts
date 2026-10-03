@@ -135,7 +135,22 @@ export function esComisionBancaria(m: Pick<MovimientoIA, "descripcion" | "cargo"
   return esCargo(m) && ES_COMISION.test(textoBanco(m.descripcion));
 }
 
-export type CatalogosSugerencia = { reglas: Regla[]; proveedores: ProveedorCat[]; conceptoHabitual: Map<number, number> };
+export type CatalogosSugerencia = {
+  reglas: Regla[]; proveedores: ProveedorCat[]; conceptoHabitual: Map<number, number>;
+  clasifPorTarjeta?: Map<string, number>;   // últimos 4 dígitos de una tarjeta → clasificación que los lleva en el nombre
+};
+
+/** Últimos 4 dígitos de la tarjeta que hizo el movimiento (titular, adicional o digital). Solo tarjetas de crédito. */
+export function tarjetaDelMovimiento(m: MovimientoIA, datos: Pick<EstadoIA, "tipo_producto" | "terminacion">): string | null {
+  if (datos.tipo_producto !== "tarjeta_credito") return null;
+  const propia = (m.tarjeta ?? "").replace(/\D/g, "").slice(-4);
+  if (propia.length === 4) return propia;
+  // Lecturas anteriores: la tarjeta adicional viene al final del detalle ("· Tarjeta adicional ****1234")
+  const marca = /TARJETA\s+(?:ADICIONAL|DIGITAL|TITULAR)\s*[*X]*\s*(\d{4})/i.exec(`${m.detalle ?? ""} ${m.descripcion ?? ""}`);
+  if (marca) return marca[1];
+  const titular = (datos.terminacion ?? "").replace(/\D/g, "").slice(-4);
+  return titular.length === 4 ? titular : null;
+}
 
 export function armarFilas(
   datos: EstadoIA, existentes: Existente[], historial: Historico[],
@@ -151,6 +166,8 @@ export function armarFilas(
   const ctx = { reglas: catalogos.reglas, candidatos: prepararNombres(catalogos.proveedores), conceptoHabitual: catalogos.conceptoHabitual, historial: porHistorial };
   const filas: FilaImportacion[] = datos.movimientos.map((m, i) => {
     const s = sugerirMovimiento(m, i, ctx);
+    const tarjeta = tarjetaDelMovimiento(m, datos);
+    const clasifTarjeta = tarjeta ? catalogos.clasifPorTarjeta?.get(tarjeta) : undefined;
     return aplicarReglaBanco({
       ...m,
       descripcion: ocultarTarjetas(m.descripcion) ?? "",
@@ -164,6 +181,8 @@ export function armarFilas(
       concepto_id: s?.concepto_id ? String(s.concepto_id) : "",
       sugerencia: s?.detalle,
       origen: s?.origen,
+      tarjeta,
+      clasificaciones: clasifTarjeta ? [String(clasifTarjeta)] : undefined,
     }, regla);
   });
   return { filas, cuadre };
