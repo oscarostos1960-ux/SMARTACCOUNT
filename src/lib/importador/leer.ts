@@ -2,7 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { obtenerPermisos } from "@/lib/auth";
 import { leerEstadoConIA } from "./ia";
-import { completarCargosDelResumen, cuadrar, quitarMensualidadesSobrantes } from "./analisis";
+import { completarCargosDelResumen, cuadrar, quitarCargosDelResumenRepetidos, quitarMensualidadesSobrantes } from "./analisis";
 import type { EstadoIA, ResumenLectura } from "./esquema";
 
 type Supa = Awaited<ReturnType<typeof createClient>>;
@@ -31,7 +31,7 @@ export async function leerArchivo(
   let modelo: string;
   try {
     ({ datos, modelo } = await leerEstadoConIA(Buffer.from(await blob.arrayBuffer()), tipo, nombre));
-    datos = quitarMensualidadesSobrantes(completarCargosDelResumen(datos));
+    datos = quitarMensualidadesSobrantes(quitarCargosDelResumenRepetidos(completarCargosDelResumen(datos)));
   } catch (e) {
     const msg = e instanceof Error ? e.message : "error desconocido";
     await supabase.from("importaciones").update({ estado: "error", error: msg.slice(0, 1000) }).eq("id", id);

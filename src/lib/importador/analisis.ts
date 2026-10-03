@@ -124,10 +124,10 @@ export function sugerir(movs: MovimientoIA[], historial: Historico[]) {
 // ---------- Todo junto: filas de la vista previa ----------
 // ---------- Comisiones: siempre a favor del banco que las cobra ----------
 export type ReglaBanco = { proveedorBanco: number | null; conceptoComision: number | null };
-const ES_COMISION = /COMISI|\bCOM\b|ANUALIDAD|COBRANZA|\bADMON\b|ADMINISTRACION|MEMBRESIA|CUOTA ANUAL/;
+const ES_COMISION = /COMISI|\bCOM\b|ANUALIDAD|COBRANZA|\bADMON\b|ADMINISTRACION|MEMBRESIA|CUOTA ANUAL|PENALIZ|PAGO TARDIO|FALTA DE PAGO|SOBREGIRO/;
 // Texto para reconocer cargos del banco: sin direcciones web (".COM" no es "COM" de comisión)
 const textoBanco = (t: string | null | undefined) => normal((t ?? "").replace(/\.(com|net|mx|org)\b/gi, " "));
-const ES_CARGO_DEL_BANCO = /COMISI|\bCOM\b|ANUALIDAD|COBRANZA|\bADMON\b|ADMINISTRACION|INTERES/;   // "IVA" solo no: puede ser un pago de impuestos
+const ES_CARGO_DEL_BANCO = /COMISI|\bCOM\b|ANUALIDAD|COBRANZA|\bADMON\b|ADMINISTRACION|INTERES|PENALIZ|PAGO TARDIO|FALTA DE PAGO/;   // "IVA" solo no: puede ser un pago de impuestos
 // Un abono con la palabra "comisión" suele ser un ingreso (p. ej. comisiones de una aseguradora), no un cobro del banco
 const esCargo = (m: Pick<MovimientoIA, "cargo" | "abono">) => m.abono === 0;
 export function esComisionBancaria(m: Pick<MovimientoIA, "descripcion" | "cargo" | "abono">, conceptoId: number | null, regla: ReglaBanco) {
@@ -239,6 +239,31 @@ export function completarCargosDelResumen(datos: EstadoIA): EstadoIA {
     const elegidos = extra.filter((_, k) => mask & (1 << k));
     if (cuadrar({ ...datos, movimientos: [...datos.movimientos, ...elegidos] }).cuadre.ok) {
       return { ...datos, movimientos: [...datos.movimientos, ...elegidos] };
+    }
+  }
+  return datos;
+}
+
+// ---------- Cargos del resumen repetidos ----------
+// La IA a veces agrega "COMISIONES DEL PERIODO" (o intereses / IVA) aunque ese cargo ya venga en el detalle
+// con otro nombre (p. ej. "PENALIZACION PAGO TARDIO"). Si el estado tiene cargos de más, se quitan los renglones
+// agregados del resumen cuya suma es exactamente lo que sobra.
+const ES_RENGLON_DEL_RESUMEN = /^(INTERESES|COMISIONES|IVA)\b.*(DEL PERIODO|INTERESES Y COMISIONES)/;
+export function quitarCargosDelResumenRepetidos(datos: EstadoIA): EstadoIA {
+  if (datos.tipo_producto !== "tarjeta_credito") return datos;
+  const { cuadre } = cuadrar(datos);
+  if (!cuadre.aplica || cuadre.ok || cuadre.diferencia === null || cuadre.diferencia >= 0) return datos;
+  const sobra = -cuadre.diferencia;
+  const candidatos = datos.movimientos.map((m, i) => ({ m, i }))
+    .filter(({ m }) => m.cargo > 0 && m.abono === 0 && ES_RENGLON_DEL_RESUMEN.test(textoBanco(m.descripcion)));
+  if (!candidatos.length || candidatos.length > 8) return datos;
+  for (let mask = 1; mask < (1 << candidatos.length); mask++) {
+    let suma = 0;
+    candidatos.forEach((c, k) => { if (mask & (1 << k)) suma += c.m.cargo; });
+    if (Math.abs(redondea(suma) - sobra) < 0.015) {
+      const quitar = new Set(candidatos.filter((_, k) => mask & (1 << k)).map((c) => c.i));
+      const notas = [datos.notas, `Se quitaron ${quitar.size} cargo(s) del resumen que ya venían en el detalle con otro nombre.`].filter(Boolean).join(" ");
+      return { ...datos, movimientos: datos.movimientos.filter((_, i) => !quitar.has(i)), notas };
     }
   }
   return datos;
