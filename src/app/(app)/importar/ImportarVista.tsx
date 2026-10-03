@@ -441,6 +441,8 @@ function VistaPrevia({
   const sinImporte = elegidas_(filas).filter((f) => !f.cargo && !f.abono).length;
   const fechaMala = elegidas_(filas).filter((f) => !FECHA_OK(f.fecha)).length;
   const sinDescripcion = elegidas_(filas).filter((f) => f.manual && !f.descripcion.trim()).length;
+  // Los "¿Duplicado?" sin palomita cuentan para el cuadre del estado, pero no se importan: hay que revisarlos
+  const posiblesSinMarcar = filas.filter((f) => !f.quitado && f.estado === "posible" && !f.incluir).length;
   const cuenta = analisis.cuentaId ? nombreCuenta.get(analisis.cuentaId) : undefined;
   const moneda = cuenta?.moneda ?? d.moneda ?? "MXN";
   const elegidas = elegidas_(filas);
@@ -608,6 +610,13 @@ function VistaPrevia({
           <AlertTriangle className="mr-1.5 inline h-4 w-4" aria-hidden />
           {fechaMala > 0 && <>{fechaMala} movimiento(s) sin fecha válida: corrígela en la tabla para poder importar. </>}
           {sinImporte > 0 && <>{sinImporte} movimiento(s) van sin importe ($0). Si es correcto (por ejemplo, una exención de comisión) puedes importarlos así; si no, escribe el cargo o abono en la tabla o quítales la palomita.</>}
+        </p>
+      )}
+      {posiblesSinMarcar > 0 && (
+        <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn" data-aviso-posibles>
+          <AlertTriangle className="mr-1.5 inline h-4 w-4" aria-hidden />
+          {posiblesSinMarcar} movimiento(s) marcados como <strong>¿Duplicado?</strong> van sin palomita. El cuadre de arriba los cuenta, pero no se van a importar:
+          revisa el folio que indica cada uno y, si no es el mismo movimiento, ponle la palomita. Si no lo importas, el saldo de la cuenta no coincidirá con el banco.
         </p>
       )}
       {error && <p role="alert" className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger">{error}</p>}

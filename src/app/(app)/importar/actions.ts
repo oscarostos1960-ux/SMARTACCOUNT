@@ -59,12 +59,12 @@ async function construirAnalisis(supabase: Supa, imp: {
   let historial: Historico[] = [];
   if (cuentaId) {
     const [exR, histR] = await Promise.all([
-      supabase.from("transacciones").select("id, folio, fecha, cargo, abono").eq("cuenta_id", cuentaId)
+      supabase.from("transacciones").select("id, folio, fecha, cargo, abono, descripcion").eq("cuenta_id", cuentaId)
         .gte("fecha", desde).lte("fecha", hasta).order("fecha").limit(1000),
       supabase.from("transacciones").select("descripcion, leyenda1, leyenda2, leyenda3, proveedor_id, concepto_id")
         .eq("cuenta_id", cuentaId).order("fecha", { ascending: false }).limit(1000),
     ]);
-    existentes = (exR.data ?? []).map((e) => ({ id: Number(e.id), folio: Number(e.folio), fecha: String(e.fecha), cargo: Number(e.cargo), abono: Number(e.abono) }));
+    existentes = (exR.data ?? []).map((e) => ({ id: Number(e.id), folio: Number(e.folio), fecha: String(e.fecha), cargo: Number(e.cargo), abono: Number(e.abono), descripcion: e.descripcion ?? "" }));
     historial = (histR.data ?? []).filter((h) => h.proveedor_id || h.concepto_id)
       .map((h) => ({ texto: [h.descripcion, h.leyenda1, h.leyenda2, h.leyenda3].filter(Boolean).join(" "), proveedor_id: h.proveedor_id, concepto_id: h.concepto_id }));
   }

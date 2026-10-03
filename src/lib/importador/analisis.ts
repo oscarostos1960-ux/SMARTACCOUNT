@@ -3,7 +3,7 @@
 import type { Cuadre, EstadoIA, FilaImportacion, MovimientoIA } from "./esquema";
 import { prepararNombres, sugerirMovimiento, type ProveedorCat, type Regla, type Sugerencia } from "./sugerencias";
 
-export type Existente = { id: number; folio: number; fecha: string; cargo: number; abono: number };
+export type Existente = { id: number; folio: number; fecha: string; cargo: number; abono: number; descripcion?: string };
 export type Historico = { texto: string; proveedor_id: number | null; concepto_id: number | null };
 
 const redondea = (n: number) => Math.round(n * 100) / 100;
@@ -56,10 +56,18 @@ export function cuadrar(datos: EstadoIA): { cuadre: Cuadre; saldosOk: (boolean |
 // ---------- Duplicados: mismo importe y tipo, misma fecha (o hasta 3 días de diferencia) ----------
 const dias = (a: string, b: string) => Math.abs(Date.parse(`${a}T12:00:00Z`) - Date.parse(`${b}T12:00:00Z`)) / 86400000;
 
+// Dos mensualidades de la misma compra a meses tienen el mismo importe cada mes: "8/9" y "7/9" no son el mismo movimiento
+const NUM_MENSUALIDAD = /\b(\d{1,2})\s?(?:\/|DE)\s?(\d{1,2})\b/i;
+function otraMensualidad(a?: string | null, b?: string | null) {
+  const x = NUM_MENSUALIDAD.exec(a ?? ""), y = NUM_MENSUALIDAD.exec(b ?? "");
+  return !!x && !!y && (Number(x[1]) !== Number(y[1]) || Number(x[2]) !== Number(y[2]));
+}
+
 export function buscarDuplicados(movs: MovimientoIA[], existentes: Existente[]) {
   const usados = new Set<number>();
   const resultado: ({ estado: "duplicado" | "posible"; folio: number; fecha: string } | null)[] = movs.map(() => null);
-  const mismo = (m: MovimientoIA, e: Existente) => Math.abs(m.cargo - e.cargo) < 0.005 && Math.abs(m.abono - e.abono) < 0.005;
+  const mismo = (m: MovimientoIA, e: Existente) => Math.abs(m.cargo - e.cargo) < 0.005 && Math.abs(m.abono - e.abono) < 0.005
+    && !otraMensualidad(m.descripcion, e.descripcion);
   // 1a vuelta: misma fecha; 2a vuelta: hasta 3 días (el banco a veces aplica al día siguiente)
   for (const [tolerancia, estado] of [[0, "duplicado"], [3, "posible"]] as const) {
     movs.forEach((m, i) => {
@@ -288,6 +296,21 @@ export function quitarCargosDelResumenRepetidos(datos: EstadoIA): EstadoIA {
     }
   }
   return datos;
+}
+
+// ---------- Fecha de las mensualidades agregadas ----------
+// Las mensualidades que agrega la IA van con la fecha de corte; si quedaron fuera del periodo (p. ej. con la fecha
+// de la mensualidad anterior), se pasan al corte para que no se confundan con la del mes pasado.
+export function fecharMensualidades(datos: EstadoIA): EstadoIA {
+  const ini = datos.periodo_inicio, fin = datos.periodo_fin;
+  if (!ini || !fin) return datos;
+  let cambio = false;
+  const movimientos = datos.movimientos.map((m) => {
+    if (!/^MENSUALIDAD\b/i.test((m.descripcion ?? "").trim()) || (m.fecha >= ini && m.fecha <= fin)) return m;
+    cambio = true;
+    return { ...m, fecha: fin };
+  });
+  return cambio ? { ...datos, movimientos } : datos;
 }
 
 // ---------- Mensualidades de meses sin intereses que sobran ----------
