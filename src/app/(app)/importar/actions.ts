@@ -163,10 +163,19 @@ export async function importarMovimientos(id: number, cuentaId: number, filas: F
     importacion_id: id,
     clasificaciones: [...new Set((f.clasificaciones ?? []).map(Number).filter((n) => Number.isInteger(n) && n > 0))],
   }));
-  // De a uno por uno para que cada movimiento tome el siguiente folio de la cuenta
+  // De a uno por uno, cada movimiento en su lugar por fecha: toma el folio siguiente al último movimiento
+  // con la misma fecha o anterior, y los posteriores se recorren (lo hace el trigger de la base).
+  // Así, al importar un mes atrasado, los folios siguen el orden de las fechas.
   let importados = 0;
   for (const { clasificaciones, ...r } of registros) {
-    const { data: nuevo, error } = await supabase.from("transacciones").insert(r).select("id").single();
+    const { data: previo } = await supabase.from("transacciones").select("folio")
+      .eq("cuenta_id", cuentaId).lte("fecha", r.fecha).order("folio", { ascending: false }).limit(1);
+    const { data: posterior } = await supabase.from("transacciones").select("folio")
+      .eq("cuenta_id", cuentaId).gt("fecha", r.fecha).limit(1);
+    // Si no hay nada posterior, va al final (folio automático); si lo hay, se inserta en medio
+    const folio = posterior?.length ? (previo?.[0]?.folio ?? 0) + 1 : undefined;
+    const fila: typeof r & { folio?: number } = folio ? { ...r, folio } : r;
+    const { data: nuevo, error } = await supabase.from("transacciones").insert(fila).select("id").single();
     if (!error && nuevo && clasificaciones.length) {
       await supabase.from("transaccion_clasificaciones").insert(clasificaciones.map((c) => ({ transaccion_id: nuevo.id, clasificacion_id: c })));
     }
