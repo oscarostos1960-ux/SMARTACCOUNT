@@ -22,7 +22,8 @@ export type ImportacionResumen = {
   banco: string | null; periodo_inicio: string | null; periodo_fin: string | null; movimientos_importados: number; created_at: string;
 };
 
-type Fila = FilaImportacion & { incluir: boolean };
+// quitado: el usuario lo sacó del estado de cuenta (no cuenta para el cuadre); manual: lo agregó el usuario
+type Fila = FilaImportacion & { incluir: boolean; quitado?: boolean; manual?: boolean };
 type ItemLote = {
   clave: string; nombre: string; archivo: File;
   estado: "esperando" | "subiendo" | "leyendo" | "listo" | "error" | "importado" | "descartado";
@@ -154,7 +155,8 @@ export default function ImportarVista({ usuarioId, cuentas, historial, conceptos
   function mostrar(a: Analisis, previas?: Fila[]) {
     setLlenados(undefined);
     const antes = new Map((previas ?? []).map((f) => [f.indice, f]));
-    setFilas(a.filas.map((f) => {
+    const manuales = (previas ?? []).filter((f) => f.manual);
+    setFilas([...a.filas.map((f): Fila => {
       const v = antes.get(f.indice);
       // Al cambiar de cuenta se conservan las correcciones que ya hizo el usuario
       const base = v ? {
@@ -162,8 +164,8 @@ export default function ImportarVista({ usuarioId, cuentas, historial, conceptos
         proveedor_id: v.proveedor_id || f.proveedor_id, concepto_id: v.concepto_id || f.concepto_id,
         clasificaciones: v.clasificaciones,
       } : f;
-      return { ...base, incluir: f.estado === "nuevo" };
-    }));
+      return { ...base, incluir: f.estado === "nuevo", quitado: v?.quitado };
+    }), ...manuales]);
     setVersion((v) => v + 1);
     setFase({ tipo: "vista", analisis: a });
   }
@@ -297,7 +299,7 @@ export default function ImportarVista({ usuarioId, cuentas, historial, conceptos
       onImportar={() => startImportar(async () => {
         const cuentaId = fase.analisis.cuentaId;
         if (!cuentaId) { setError("Elige la cuenta."); return; }
-        const elegidas = filas.filter((f) => f.incluir).map((f) => ({
+        const elegidas = filas.filter((f) => f.incluir && !f.quitado).map((f) => ({
           fecha: f.fecha, descripcion: f.descripcion, detalle: f.detalle, contraparte: f.contraparte, referencia: f.referencia,
           cargo: f.cargo, abono: f.abono, proveedor_id: f.proveedor_id, concepto_id: f.concepto_id,
           clasificaciones: f.clasificaciones ?? [],
@@ -380,7 +382,7 @@ export default function ImportarVista({ usuarioId, cuentas, historial, conceptos
 // De dónde salió la sugerencia (de más a menos confiable)
 const ORIGEN: Record<string, string> = { regla: "Por regla", banco: "Cargo del banco", nombre: "Por nombre", historial: "Parecido a otros" };
 const FECHA_OK = (f: string) => /^\d{4}-\d{2}-\d{2}$/.test(f) && !Number.isNaN(Date.parse(f));
-const elegidas_ = (fs: Fila[]) => fs.filter((f) => f.incluir);
+const elegidas_ = (fs: Fila[]) => fs.filter((f) => f.incluir && !f.quitado);
 
 // Importe editable: se escribe libre y se guarda como número (vacío = 0)
 function Importe({ valor, onCambio, clase, etiqueta }: { valor: number; onCambio: (v: number) => void; clase: string; etiqueta: string }) {
@@ -417,14 +419,32 @@ function VistaPrevia({
   onCuenta: (c: number | null) => void; onCancelar: () => void; onDescartar: () => void; onImportar: () => void;
 }) {
   const d = analisis.datos;
-  // El cuadre se recalcula al corregir importes en la vista previa
-  const { cuadre: c, saldosOk } = useMemo(() => cuadrar({ ...d, movimientos: filas }), [d, filas]);
+  // El cuadre se recalcula al corregir importes, quitar renglones o agregar movimientos en la vista previa.
+  // Cuentan todos los renglones del estado (también los que ya existen), menos los que el usuario quitó.
+  const visibles = useMemo(() => filas.filter((f) => !f.quitado), [filas]);
+  const quitados = filas.length - visibles.length;
+  const { cuadre: c, saldosOk } = useMemo(() => cuadrar({ ...d, movimientos: visibles }), [d, visibles]);
+  const tarjetaCredito = d.tipo_producto === "tarjeta_credito";
+  // Movimiento nuevo hecho a mano; con "importe" se llena para cubrir la diferencia del cuadre
+  function agregarMovimiento(importe?: number) {
+    const indice = filas.reduce((m, f) => Math.max(m, f.indice), -1) + 1;
+    const dif = importe ?? 0;
+    // En tarjeta: falta saldo → cargo; sobra → abono. En cuenta: al revés.
+    const esCargo = tarjetaCredito ? dif >= 0 : dif < 0;
+    setFilas((fs) => [...fs, {
+      fecha: d.periodo_fin ?? fs.at(-1)?.fecha ?? "", descripcion: "", detalle: "Agregado a mano", contraparte: null, referencia: null,
+      cargo: esCargo ? Math.abs(dif) : 0, abono: esCargo ? 0 : Math.abs(dif), saldo: null,
+      indice, estado: "nuevo", saldoOk: null, proveedor_id: "", concepto_id: "", incluir: true, manual: true,
+    }]);
+    setTimeout(() => document.querySelector<HTMLInputElement>(`#desc-${indice}`)?.focus(), 50);
+  }
   const sinImporte = elegidas_(filas).filter((f) => !f.cargo && !f.abono).length;
   const fechaMala = elegidas_(filas).filter((f) => !FECHA_OK(f.fecha)).length;
+  const sinDescripcion = elegidas_(filas).filter((f) => f.manual && !f.descripcion.trim()).length;
   const cuenta = analisis.cuentaId ? nombreCuenta.get(analisis.cuentaId) : undefined;
   const moneda = cuenta?.moneda ?? d.moneda ?? "MXN";
-  const elegidas = filas.filter((f) => f.incluir);
-  const cuenta_ = (estado: Fila["estado"]) => filas.filter((f) => f.estado === estado).length;
+  const elegidas = elegidas_(filas);
+  const cuenta_ = (estado: Fila["estado"]) => visibles.filter((f) => f.estado === estado && !f.manual).length;
   const tc = d.tipo_producto === "tarjeta_credito";
   const prov = useMemo(() => proveedores.filter((p) => p.activo), [proveedores]);
   const conc = useMemo(() => conceptos.filter((p) => p.activo), [conceptos]);
@@ -469,13 +489,24 @@ function VistaPrevia({
       {analisis.yaImportado && <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn"><AlertTriangle className="mr-1.5 inline h-4 w-4" aria-hidden />{analisis.yaImportado}</p>}
       {d.notas && <p className="rounded-lg bg-primary-soft px-4 py-3 text-sm text-primary"><Sparkles className="mr-1.5 inline h-4 w-4" aria-hidden />Nota de la IA: {d.notas}</p>}
       {!c.ok && c.aplica && (
-        <p className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger">
-          Revisa los renglones marcados con <XCircle className="inline h-3.5 w-3.5" aria-label="saldo no cuadra" />: ahí el saldo del banco no coincide. Puede faltar o sobrar un movimiento.
-        </p>
+        <div className="flex flex-wrap items-center gap-3 rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger" data-aviso-cuadre>
+          <p className="min-w-0 flex-1">
+            Faltan o sobran {dinero(Math.abs(c.diferencia ?? 0), moneda)} para cuadrar con el estado de cuenta.
+            Si sobra un renglón, quítalo con <Trash2 className="inline h-3.5 w-3.5" aria-label="Quitar" />; si falta uno (p. ej. la mensualidad de una compra a meses), agrégalo.
+          </p>
+          <button type="button" className="btn-ghost bg-surface px-2 py-1 text-danger" onClick={() => agregarMovimiento(c.diferencia ?? 0)} data-agregar-diferencia>
+            <Plus className="h-4 w-4" aria-hidden /> Agregar {(tarjetaCredito ? (c.diferencia ?? 0) >= 0 : (c.diferencia ?? 0) < 0) ? "cargo" : "abono"} por {dinero(Math.abs(c.diferencia ?? 0), moneda)}
+          </button>
+        </div>
       )}
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-        <span><strong>{filas.length}</strong> movimientos</span>
+        <span><strong>{visibles.length}</strong> movimientos</span>
+        {quitados > 0 && (
+          <button className="text-muted underline" onClick={() => setFilas((fs) => fs.map((f) => ({ ...f, quitado: false })))} data-restaurar>
+            {quitados} quitado(s) · regresarlos
+          </button>
+        )}
         <span className="text-ok">{cuenta_("nuevo")} nuevos</span>
         <span className="text-muted">{cuenta_("duplicado")} ya existen</span>
         {cuenta_("posible") > 0 && <span className="text-warn">{cuenta_("posible")} posibles duplicados</span>}
@@ -501,18 +532,26 @@ function VistaPrevia({
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {filas.map((f, n) => (
+            {visibles.map((f, n) => (
               <tr key={f.indice} className={`align-top ${!f.incluir ? "opacity-55" : ""}`} data-estado={f.estado}>
                 <td className="px-3 py-2.5">
-                  <input type="checkbox" checked={f.incluir} onChange={(e) => cambiar(f.indice, { incluir: e.target.checked })}
-                    className="h-4 w-4 accent-[var(--primary)]" aria-label={`Importar ${f.descripcion}`} />
+                  <div className="flex flex-col items-center gap-2">
+                    <input type="checkbox" checked={f.incluir} onChange={(e) => cambiar(f.indice, { incluir: e.target.checked })}
+                      className="h-4 w-4 accent-[var(--primary)]" aria-label={`Importar ${f.descripcion}`} />
+                    <button type="button" className="text-muted hover:text-danger" title={f.manual ? "Borrar este renglón" : "Quitar: no es parte del estado de cuenta (deja de contar para el cuadre)"}
+                      aria-label={`Quitar ${f.descripcion}`} data-quitar
+                      onClick={() => f.manual ? setFilas((fs) => fs.filter((x) => x.indice !== f.indice)) : cambiar(f.indice, { quitado: true })}>
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                  </div>
                 </td>
                 <td className="px-3 py-2">
                   <input type="date" className={`input w-36 py-1 ${FECHA_OK(f.fecha) ? "" : "border-danger"}`} value={FECHA_OK(f.fecha) ? f.fecha : ""}
                     onChange={(e) => cambiar(f.indice, { fecha: e.target.value })} aria-label="Fecha" aria-invalid={!FECHA_OK(f.fecha)} />
                 </td>
                 <td className="min-w-60 max-w-[26rem] px-3 py-2">
-                  <input className="input py-1" value={f.descripcion} onChange={(e) => cambiar(f.indice, { descripcion: e.target.value })} aria-label="Descripción" />
+                  <input id={`desc-${f.indice}`} className={`input py-1 ${f.manual && !f.descripcion.trim() ? "border-danger" : ""}`} value={f.descripcion} placeholder={f.manual ? "Descripción, p. ej. MENSUALIDAD 3/3 HOSP MS LAB" : undefined}
+                    onChange={(e) => cambiar(f.indice, { descripcion: e.target.value })} aria-label="Descripción" />
                   <p className="mt-1 line-clamp-2 text-xs text-muted" title={f.detalle}>{[f.contraparte, f.detalle].filter(Boolean).join(" · ")}</p>
                 </td>
                 <td className="px-3 py-2">
@@ -525,7 +564,8 @@ function VistaPrevia({
                   {!f.cargo && !f.abono && <p className="mt-1 text-right text-xs text-muted">Sin importe ($0)</p>}
                 </td>
                 <td className="whitespace-nowrap px-3 py-2.5">
-                  {f.estado === "nuevo" ? <span className="badge bg-ok-soft text-ok">Nuevo</span>
+                  {f.manual ? <span className="badge bg-primary-soft text-primary" data-manual>Agregado a mano</span>
+                    : f.estado === "nuevo" ? <span className="badge bg-ok-soft text-ok">Nuevo</span>
                     : f.estado === "duplicado" ? <span className="badge bg-surface-2 text-muted" title={`Ya existe: folio ${f.coincide?.folio}`}>Ya existe · folio {f.coincide?.folio}</span>
                       : <span className="badge bg-warn-soft text-warn" title={`Mismo importe el ${fecha(f.coincide?.fecha)}`}>¿Duplicado? folio {f.coincide?.folio}</span>}
                   {saldosOk[n] === false && <span className="mt-1 flex items-center gap-1 text-xs text-danger"><XCircle className="h-3.5 w-3.5" aria-hidden /> Saldo no cuadra</span>}
@@ -548,9 +588,14 @@ function VistaPrevia({
                 </td>
               </tr>
             ))}
-            {filas.length === 0 && <tr><td colSpan={8} className="px-4 py-10 text-center text-muted">La IA no encontró movimientos en este archivo.</td></tr>}
+            {visibles.length === 0 && <tr><td colSpan={8} className="px-4 py-10 text-center text-muted">La IA no encontró movimientos en este archivo.</td></tr>}
           </tbody>
         </table>
+        <div className="border-t border-border px-3 py-2">
+          <button type="button" className="btn-ghost px-2 py-1" onClick={() => agregarMovimiento()} data-agregar>
+            <Plus className="h-4 w-4" aria-hidden /> Agregar movimiento
+          </button>
+        </div>
       </div>
 
       {llenados && (
@@ -575,15 +620,15 @@ function VistaPrevia({
               cargos {dinero(elegidas.reduce((s, f) => s + f.cargo, 0), moneda)} · abonos {dinero(elegidas.reduce((s, f) => s + f.abono, 0), moneda)}
             </span>
           </p>
-          {!importando && (!analisis.cuentaId || fechaMala > 0 || !elegidas.length) && (
+          {!importando && (!analisis.cuentaId || fechaMala > 0 || sinDescripcion > 0 || !elegidas.length) && (
             <p className="text-sm font-medium text-danger" data-motivo>
-              {!analisis.cuentaId ? "Elige arriba la cuenta donde se importan." : fechaMala > 0 ? "Corrige las fechas marcadas en rojo." : "Marca al menos un movimiento."}
+              {!analisis.cuentaId ? "Elige arriba la cuenta donde se importan." : fechaMala > 0 ? "Corrige las fechas marcadas en rojo." : sinDescripcion > 0 ? "Escribe la descripción del movimiento que agregaste." : "Marca al menos un movimiento."}
             </p>
           )}
           <div className="ml-auto flex flex-wrap gap-2">
             <button className="btn-ghost" onClick={onCancelar} disabled={importando}><RotateCcw className="h-4 w-4" aria-hidden /> Después</button>
             <button className="btn-ghost text-danger" onClick={onDescartar} disabled={importando}><Trash2 className="h-4 w-4" aria-hidden /> Descartar</button>
-            <button className="btn-primary" onClick={onImportar} disabled={importando || !elegidas.length || !analisis.cuentaId || fechaMala > 0}>
+            <button className="btn-primary" onClick={onImportar} disabled={importando || !elegidas.length || !analisis.cuentaId || fechaMala > 0 || sinDescripcion > 0}>
               {importando ? "Importando…" : `Importar ${elegidas.length} a ${cuenta?.nombre ?? "…"}`}
             </button>
           </div>

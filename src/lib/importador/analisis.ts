@@ -228,6 +228,7 @@ export function aplicarReglaBanco(f: FilaImportacion, regla: ReglaBanco): FilaIm
 // ---------- Cargos del banco que solo vienen en el resumen ----------
 // Algunas tarjetas (p. ej. Scotiabank) muestran intereses e IVA solo en el resumen y no en el detalle.
 // Si el resumen trae un importe que no está entre los movimientos, se agrega como cargo con la fecha de corte.
+const ES_MENSUALIDAD = /PAGO FIJO|MENSUALIDAD|\bMSI\b|MESES SIN INTERESES|PLAZO FIJO/;
 export function completarCargosDelResumen(datos: EstadoIA): EstadoIA {
   const r = datos.resumen_cargos;
   if (!r || datos.tipo_producto !== "tarjeta_credito") return datos;
@@ -238,6 +239,7 @@ export function completarCargosDelResumen(datos: EstadoIA): EstadoIA {
     [r.intereses, (m) => /INTERES/.test(n(m)) && !/\bIVA\b/.test(n(m)), "INTERESES DEL PERIODO"],
     [r.comisiones, (m) => ES_COMISION.test(n(m)) && !/\bIVA\b/.test(n(m)), "COMISIONES DEL PERIODO"],
     [r.iva, (m) => /\bIVA\b/.test(n(m)), "IVA DE INTERESES Y COMISIONES"],
+    [r.meses ?? null, (m) => ES_MENSUALIDAD.test(normal(`${m.descripcion} ${m.detalle}`)) || /\b\d{1,2}\s?(?:\/|DE)\s?\d{1,2}\b/i.test(m.descripcion ?? ""), "MENSUALIDAD DE COMPRAS A MESES"],
   ];
   const extra: MovimientoIA[] = [];
   for (const [total, es, nombre] of grupos) {
@@ -292,7 +294,6 @@ export function quitarCargosDelResumenRepetidos(datos: EstadoIA): EstadoIA {
 // En algunos formatos (p. ej. Scotiabank anterior) la compra a meses ya se sumó completa el mes en que se hizo,
 // y la tabla de "plazo fijo" solo informa la mensualidad. Si la IA las registró como cargo y por eso el estado
 // no cuadra, se quitan las que sobran (solo si quitándolas cuadra exacto).
-const ES_MENSUALIDAD = /PAGO FIJO|MENSUALIDAD|\bMSI\b|MESES SIN INTERESES|PLAZO FIJO/;
 export function quitarMensualidadesSobrantes(datos: EstadoIA): EstadoIA {
   if (datos.tipo_producto !== "tarjeta_credito") return datos;
   const { cuadre } = cuadrar(datos);
