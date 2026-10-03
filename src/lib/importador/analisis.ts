@@ -124,13 +124,15 @@ export function sugerir(movs: MovimientoIA[], historial: Historico[]) {
 // ---------- Todo junto: filas de la vista previa ----------
 // ---------- Comisiones: siempre a favor del banco que las cobra ----------
 export type ReglaBanco = { proveedorBanco: number | null; conceptoComision: number | null };
-const ES_COMISION = /COMISI|\bCOM\b|ANUALIDAD|COBRANZA/;
-const ES_CARGO_DEL_BANCO = /COMISI|\bCOM\b|ANUALIDAD|COBRANZA|INTERES/;   // "IVA" solo no: puede ser un pago de impuestos
+const ES_COMISION = /COMISI|\bCOM\b|ANUALIDAD|COBRANZA|\bADMON\b|ADMINISTRACION|MEMBRESIA|CUOTA ANUAL/;
+// Texto para reconocer cargos del banco: sin direcciones web (".COM" no es "COM" de comisión)
+const textoBanco = (t: string | null | undefined) => normal((t ?? "").replace(/\.(com|net|mx|org)\b/gi, " "));
+const ES_CARGO_DEL_BANCO = /COMISI|\bCOM\b|ANUALIDAD|COBRANZA|\bADMON\b|ADMINISTRACION|INTERES/;   // "IVA" solo no: puede ser un pago de impuestos
 // Un abono con la palabra "comisión" suele ser un ingreso (p. ej. comisiones de una aseguradora), no un cobro del banco
 const esCargo = (m: Pick<MovimientoIA, "cargo" | "abono">) => m.abono === 0;
 export function esComisionBancaria(m: Pick<MovimientoIA, "descripcion" | "cargo" | "abono">, conceptoId: number | null, regla: ReglaBanco) {
   if (regla.conceptoComision && conceptoId === regla.conceptoComision) return true;
-  return esCargo(m) && ES_COMISION.test(normal(m.descripcion));
+  return esCargo(m) && ES_COMISION.test(textoBanco(m.descripcion));
 }
 
 export type CatalogosSugerencia = { reglas: Regla[]; proveedores: ProveedorCat[]; conceptoHabitual: Map<number, number> };
@@ -194,7 +196,7 @@ export function aplicarReglaBanco(f: FilaImportacion, regla: ReglaBanco): FilaIm
   // El concepto solo cuenta si lo enseñó el usuario (regla); uno sugerido por "concepto habitual" no basta
   const conceptoSeguro = f.origen === "regla" && f.concepto_id ? Number(f.concepto_id) : null;
   const comision = esComisionBancaria(f, conceptoSeguro, regla);
-  if (!comision && !(esCargo(f) && ES_CARGO_DEL_BANCO.test(normal(f.descripcion)))) return f;
+  if (!comision && !(esCargo(f) && ES_CARGO_DEL_BANCO.test(textoBanco(f.descripcion)))) return f;
   return {
     ...f,
     proveedor_id: String(regla.proveedorBanco),
@@ -211,10 +213,11 @@ export function completarCargosDelResumen(datos: EstadoIA): EstadoIA {
   const r = datos.resumen_cargos;
   if (!r || datos.tipo_producto !== "tarjeta_credito") return datos;
   const fecha = datos.periodo_fin ?? datos.movimientos.at(-1)?.fecha ?? "";
-  const n = (m: MovimientoIA) => normal(`${m.descripcion} ${m.detalle}`);
+  // Solo la descripción (el detalle trae direcciones web: "Amzn.com" no es una comisión)
+  const n = (m: MovimientoIA) => textoBanco(m.descripcion);
   const grupos: [number | null, (m: MovimientoIA) => boolean, string][] = [
     [r.intereses, (m) => /INTERES/.test(n(m)) && !/\bIVA\b/.test(n(m)), "INTERESES DEL PERIODO"],
-    [r.comisiones, (m) => /COMISI|COBRANZA|ANUALIDAD|\bCOM\b/.test(n(m)) && !/\bIVA\b/.test(n(m)), "COMISIONES DEL PERIODO"],
+    [r.comisiones, (m) => ES_COMISION.test(n(m)) && !/\bIVA\b/.test(n(m)), "COMISIONES DEL PERIODO"],
     [r.iva, (m) => /\bIVA\b/.test(n(m)), "IVA DE INTERESES Y COMISIONES"],
   ];
   const extra: MovimientoIA[] = [];
@@ -227,7 +230,18 @@ export function completarCargosDelResumen(datos: EstadoIA): EstadoIA {
       contraparte: null, referencia: null, cargo: falta, abono: 0, saldo: null,
     });
   }
-  return extra.length ? { ...datos, movimientos: [...datos.movimientos, ...extra] } : datos;
+  if (!extra.length) return datos;
+  // Si el estado trae saldos, solo se agregan los que hacen que cuadre exacto (si ya cuadra, nada)
+  const { cuadre } = cuadrar(datos);
+  if (!cuadre.aplica) return { ...datos, movimientos: [...datos.movimientos, ...extra] };
+  if (cuadre.ok) return datos;
+  for (let mask = (1 << extra.length) - 1; mask > 0; mask--) {
+    const elegidos = extra.filter((_, k) => mask & (1 << k));
+    if (cuadrar({ ...datos, movimientos: [...datos.movimientos, ...elegidos] }).cuadre.ok) {
+      return { ...datos, movimientos: [...datos.movimientos, ...elegidos] };
+    }
+  }
+  return datos;
 }
 
 // ---------- Mensualidades de meses sin intereses que sobran ----------
