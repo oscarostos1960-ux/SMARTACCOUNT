@@ -508,6 +508,7 @@ function VistaPrevia({
         </div>
       </section>
 
+      {analisis.saltoSaldo && <p className="rounded-lg bg-danger-soft px-4 py-3 text-sm text-danger" data-salto-saldo><AlertTriangle className="mr-1.5 inline h-4 w-4" aria-hidden />{analisis.saltoSaldo}</p>}
       {analisis.yaImportado && <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn"><AlertTriangle className="mr-1.5 inline h-4 w-4" aria-hidden />{analisis.yaImportado}</p>}
       {d.notas && <p className="rounded-lg bg-primary-soft px-4 py-3 text-sm text-primary"><Sparkles className="mr-1.5 inline h-4 w-4" aria-hidden />Nota de la IA: {d.notas}</p>}
       {!c.ok && c.aplica && (

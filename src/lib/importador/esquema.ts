@@ -76,6 +76,7 @@ export type Analisis = {
   filas: FilaImportacion[];
   cuadre: Cuadre;
   yaImportado?: string;   // aviso si el mismo archivo ya se importó antes
+  saltoSaldo?: string;    // aviso si el saldo anterior no sigue al saldo final del estado anterior importado
   regla: { proveedorBanco: number | null; conceptoComision: number | null };   // comisiones → banco que las cobra
 };
 

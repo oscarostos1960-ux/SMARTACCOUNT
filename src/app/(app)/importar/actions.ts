@@ -85,11 +85,26 @@ async function construirAnalisis(supabase: Supa, imp: {
       .eq("archivo_huella", imp.archivo_huella).eq("estado", "importado").neq("id", imp.id).limit(1);
     if (data?.length) yaImportado = `Este mismo archivo ya se importó el ${new Date(data[0].created_at).toLocaleDateString("es-MX", { timeZone: "America/Mexico_City" })} (${data[0].movimientos_importados} movimientos).`;
   }
+  // El saldo anterior de este estado debe ser el saldo final del estado anterior ya importado en la cuenta.
+  // Si no coinciden, falta un mes o alguno de los dos se leyó mal (p. ej. un saldo a favor leído como $0).
+  let saltoSaldo: string | undefined;
+  if (cuentaId && datos.periodo_inicio && datos.saldo_inicial !== null) {
+    const { data: prev } = await supabase.from("importaciones").select("archivo_nombre, saldo_final, periodo_fin")
+      .eq("cuenta_id", cuentaId).eq("estado", "importado").neq("id", imp.id)
+      .lte("periodo_fin", datos.periodo_inicio).order("periodo_fin", { ascending: false }).limit(1);
+    const p = prev?.[0] as { archivo_nombre: string; saldo_final: number | string | null; periodo_fin: string | null } | undefined;
+    const finAnterior = p?.saldo_final !== null && p?.saldo_final !== undefined ? Number(p.saldo_final) : null;
+    if (p && finAnterior !== null && Number.isFinite(finAnterior) && Math.abs(finAnterior - datos.saldo_inicial) >= 0.015) {
+      const m = (n: number) => n.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
+      saltoSaldo = `El saldo anterior de este estado (${m(datos.saldo_inicial)}) no coincide con el saldo final del estado anterior que importaste, "${p.archivo_nombre}" (${m(finAnterior)}). `
+        + `La diferencia es de ${m(Math.abs(datos.saldo_inicial - finAnterior))}: puede faltar un mes, o uno de los dos saldos se leyó mal (por ejemplo, un saldo a favor que se tomó como $0). Aunque este estado cuadre, la cuenta no coincidirá con el banco hasta corregirlo.`;
+    }
+  }
   const { movimientos: _m, ...resto } = datos;
   void _m;
   return {
     importacionId: imp.id, archivoNombre: imp.archivo_nombre, archivoTipo: imp.archivo_tipo, estado: imp.estado,
-    datos: resto, cuentaId, cuentaDetectada: detectada, filas, cuadre, yaImportado, regla,
+    datos: resto, cuentaId, cuentaDetectada: detectada, filas, cuadre, yaImportado, saltoSaldo, regla,
   };
 }
 
