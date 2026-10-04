@@ -4,7 +4,7 @@ import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  AlertTriangle, CheckCircle2, ChevronRight, Copy, FileText, FileUp, Loader2, Plus, RotateCcw, Sparkles, Tags, Trash2, XCircle,
+  AlertTriangle, CheckCircle2, ChevronRight, Copy, FileText, FileUp, Loader2, MessageSquare, Plus, RotateCcw, Sparkles, Tags, Trash2, XCircle,
 } from "lucide-react";
 import Combobox from "@/components/Combobox";
 import type { Opcion } from "@/components/movimientos/DialogoMovimiento";
@@ -162,7 +162,7 @@ export default function ImportarVista({ usuarioId, cuentas, historial, conceptos
       const base = v ? {
         ...f, fecha: v.fecha, descripcion: v.descripcion, cargo: v.cargo, abono: v.abono,
         proveedor_id: v.proveedor_id || f.proveedor_id, concepto_id: v.concepto_id || f.concepto_id,
-        clasificaciones: v.clasificaciones,
+        clasificaciones: v.clasificaciones, observaciones: v.observaciones,
       } : f;
       return { ...base, incluir: f.estado === "nuevo", quitado: v?.quitado };
     }), ...manuales]);
@@ -303,6 +303,7 @@ export default function ImportarVista({ usuarioId, cuentas, historial, conceptos
           fecha: f.fecha, descripcion: f.descripcion, detalle: f.detalle, contraparte: f.contraparte, referencia: f.referencia,
           cargo: f.cargo, abono: f.abono, proveedor_id: f.proveedor_id, concepto_id: f.concepto_id,
           clasificaciones: f.clasificaciones ?? [],
+          observaciones: f.observaciones ?? "",
         }));
         const r = await importarMovimientos(fase.analisis.importacionId, cuentaId, elegidas);
         if (r.error) { setError(r.error); return; }
@@ -385,6 +386,25 @@ const FECHA_OK = (f: string) => /^\d{4}-\d{2}-\d{2}$/.test(f) && !Number.isNaN(D
 const elegidas_ = (fs: Fila[]) => fs.filter((f) => f.incluir && !f.quitado);
 
 // Importe editable: se escribe libre y se guarda como número (vacío = 0)
+// Observaciones del movimiento: un enlace que se abre en un cuadro de texto (igual que en la captura)
+function Observacion({ id, valor, onCambio }: { id: string; valor: string; onCambio: (t: string) => void }) {
+  const [abierto, setAbierto] = useState(!!valor);
+  if (!abierto) {
+    return (
+      <button type="button" className="mt-1 flex items-center gap-1 text-xs text-muted hover:text-primary" onClick={() => setAbierto(true)} data-obs-abrir>
+        <MessageSquare className="h-3 w-3" aria-hidden /> Observaciones
+      </button>
+    );
+  }
+  return (
+    <div className="mt-1.5">
+      <label htmlFor={id} className="sr-only">Observaciones</label>
+      <textarea id={id} rows={2} className="input py-1 text-xs" placeholder="Observaciones" value={valor} maxLength={1000}
+        autoFocus={!valor} onChange={(e) => onCambio(e.target.value)} onBlur={() => { if (!valor.trim()) setAbierto(false); }} />
+    </div>
+  );
+}
+
 function Importe({ valor, onCambio, clase, etiqueta }: { valor: number; onCambio: (v: number) => void; clase: string; etiqueta: string }) {
   const [texto, setTexto] = useState(valor ? valor.toFixed(2) : "");
   const [editando, setEditando] = useState(false);
@@ -555,6 +575,7 @@ function VistaPrevia({
                   <input id={`desc-${f.indice}`} className={`input py-1 ${f.manual && !f.descripcion.trim() ? "border-danger" : ""}`} value={f.descripcion} placeholder={f.manual ? "Descripción, p. ej. MENSUALIDAD 3/3 HOSP MS LAB" : undefined}
                     onChange={(e) => cambiar(f.indice, { descripcion: e.target.value })} aria-label="Descripción" />
                   <p className="mt-1 line-clamp-2 text-xs text-muted" title={f.detalle}>{[f.contraparte, f.detalle].filter(Boolean).join(" · ")}</p>
+                  <Observacion id={`obs-${f.indice}`} valor={f.observaciones ?? ""} onCambio={(t) => cambiar(f.indice, { observaciones: t })} />
                 </td>
                 <td className="px-3 py-2">
                   <Importe valor={f.cargo} clase="text-danger" etiqueta="Cargo"

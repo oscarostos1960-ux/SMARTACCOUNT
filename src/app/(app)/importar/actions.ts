@@ -126,7 +126,7 @@ export async function abrirImportacion(id: number, cuentaId?: number | null): Pr
 
 export type FilaAImportar = {
   fecha: string; descripcion: string; detalle: string; contraparte: string | null; referencia: string | null;
-  cargo: number; abono: number; proveedor_id: string; concepto_id: string; clasificaciones?: string[];
+  cargo: number; abono: number; proveedor_id: string; concepto_id: string; clasificaciones?: string[]; observaciones?: string;
 };
 
 // 3) Crea los movimientos elegidos en la cuenta, con folios consecutivos.
@@ -158,6 +158,7 @@ export async function importarMovimientos(id: number, cuentaId: number, filas: F
     leyenda1: ocultarTarjetas(f.contraparte)?.slice(0, 255) || null,
     leyenda2: ocultarTarjetas(f.detalle)?.slice(0, 500) || null,
     referencia: ocultarTarjetas(f.referencia)?.slice(0, 100) || null,
+    observaciones: ocultarTarjetas(f.observaciones ?? "")?.trim().slice(0, 1000) || null,
     proveedor_id: idOpc(f.proveedor_id),
     concepto_id: idOpc(f.concepto_id),
     importacion_id: id,
