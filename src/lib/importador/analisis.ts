@@ -298,6 +298,35 @@ export function quitarCargosDelResumenRepetidos(datos: EstadoIA): EstadoIA {
   return datos;
 }
 
+// ---------- Renglones con cargo y abono a la vez ----------
+// A veces la IA pone el mismo importe como cargo y como abono (p. ej. "DEV.SPEI" = devolución). Eso da 0 en el cuadre
+// y el renglón no se puede importar. Se decide cuál es con el saldo que muestra el banco; si no hay saldo, por el texto.
+const PARECE_ABONO = /\bDEV\b|DEV\.|DEVOL|REEMBOLSO|BONIFIC|RECIBIDO|DEPOSITO|DEP\.|ABONO|REVERS|CANCELAC/;
+export function corregirCargoYAbono(datos: EstadoIA): EstadoIA {
+  const tarjeta = datos.tipo_producto === "tarjeta_credito";
+  let previo = datos.saldo_inicial;
+  let cambio = false;
+  const movimientos = datos.movimientos.map((m) => {
+    let r = m;
+    if (m.cargo > 0 && m.abono > 0) {
+      cambio = true;
+      const comoAbono = { ...m, cargo: 0 }, comoCargo = { ...m, abono: 0 };
+      let elegido: MovimientoIA | null = null;
+      if (m.saldo !== null && previo !== null) {
+        const conAbono = redondea(previo + (tarjeta ? -m.abono : m.abono));
+        const conCargo = redondea(previo + (tarjeta ? m.cargo : -m.cargo));
+        if (Math.abs(conAbono - m.saldo) < 0.015) elegido = comoAbono;
+        else if (Math.abs(conCargo - m.saldo) < 0.015) elegido = comoCargo;
+      }
+      r = elegido ?? (PARECE_ABONO.test(normal(m.descripcion)) ? comoAbono : comoCargo);
+    }
+    if (r.saldo !== null) previo = r.saldo;
+    else if (previo !== null) previo = redondea(previo + (tarjeta ? r.cargo - r.abono : r.abono - r.cargo));
+    return r;
+  });
+  return cambio ? { ...datos, movimientos } : datos;
+}
+
 // ---------- Fecha de las mensualidades agregadas ----------
 // Las mensualidades que agrega la IA van con la fecha de corte; si quedaron fuera del periodo (p. ej. con la fecha
 // de la mensualidad anterior), se pasan al corte para que no se confundan con la del mes pasado.
