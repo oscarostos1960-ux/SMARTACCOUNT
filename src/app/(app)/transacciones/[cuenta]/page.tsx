@@ -23,7 +23,8 @@ export default async function CuentaPage(props: PageProps<"/transacciones/[cuent
   const { cuenta: param } = await props.params;
   const cuentaId = Number(param);
   if (!Number.isInteger(cuentaId) || cuentaId <= 0) notFound();
-  const filtros = leerFiltros(await props.searchParams);
+  const sp = await props.searchParams;
+  const filtros = leerFiltros(sp);
   filtros.cuentas = undefined;
 
   const permisos = await obtenerPermisos();
@@ -71,6 +72,7 @@ export default async function CuentaPage(props: PageProps<"/transacciones/[cuent
         <p className="card p-6 text-sm text-danger">No se pudieron cargar los movimientos: {movsR.error.message}</p>
       ) : (
         <MovimientosVista
+          abrirNuevo={sp.nuevo === "1"}
           cuenta={{ cuenta_id: cuenta.cuenta_id, nombre: cuenta.nombre, moneda: cuenta.moneda, activa: cuenta.activa }}
           movimientos={movimientos}
           total={Number(movimientos[0]?.total ?? 0)}

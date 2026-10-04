@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CalendarDays, CheckSquare, ChevronLeft, ChevronRight, Filter, ListChecks, Plus, Repeat, Search, Wallet, X } from "lucide-react";
@@ -39,7 +39,7 @@ function cuandoTexto(dias: number) {
 export type Filtro = { proveedor: string; concepto: string; soloSeleccionados: boolean };
 
 export default function PagosVista({
-  vista, mes, hoy, desde, hasta, vencimientos, pagos, cuentas, cuentasEditables, esTitular, conceptos, proveedores, clasificaciones,
+  vista, mes, hoy, desde, hasta, vencimientos, pagos, cuentas, cuentasEditables, esTitular, conceptos, proveedores, clasificaciones, abrirNuevo = false,
 }: {
   vista: Vista;
   mes: string;
@@ -54,8 +54,15 @@ export default function PagosVista({
   conceptos: Opcion[];
   proveedores: Opcion[];
   clasificaciones: Clasif[];
+  abrirNuevo?: boolean;   // ?nuevo=1: abre directo el alta de un pago programado (acceso rápido del celular)
 }) {
-  const [abierto, setAbierto] = useState<Abierto | null>(null);
+  const [abierto, setAbierto] = useState<Abierto | null>(esTitular && abrirNuevo ? { tipo: "plan", pago: null } : null);
+  useEffect(() => {
+    if (!abrirNuevo) return;
+    const u = new URL(window.location.href);
+    u.searchParams.delete("nuevo");
+    window.history.replaceState(null, "", u.pathname + u.search);
+  }, [abrirNuevo]);
   const [version, setVersion] = useState(0);
   const [preparando, setPreparando] = useState<number | null>(null);
   const [filtro, setFiltro] = useState<Filtro>({ proveedor: "", concepto: "", soloSeleccionados: false });

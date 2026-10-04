@@ -86,6 +86,7 @@ export default async function PagosProgramadosPage(props: PageProps<"/pagos-prog
         <p className="card p-6 text-sm text-danger">No se pudieron cargar los pagos: {(vencR.error ?? pagosR.error)?.message}</p>
       ) : (
         <PagosVista
+          abrirNuevo={sp.nuevo === "1"}
           vista={vista}
           mes={mes}
           hoy={hoy}

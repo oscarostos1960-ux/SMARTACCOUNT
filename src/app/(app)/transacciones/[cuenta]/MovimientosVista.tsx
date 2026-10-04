@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeftRight, Plus } from "lucide-react";
 import FiltrosMovimientos from "@/components/movimientos/FiltrosMovimientos";
 import TablaMovimientos, { type Clasif } from "@/components/movimientos/TablaMovimientos";
@@ -11,7 +11,7 @@ import {
 
 export default function MovimientosVista({
   cuenta, movimientos, total, totales, filtros, porPagina, siguienteFolio,
-  conceptos, proveedores, clasificaciones, cuentas, puedeEditar,
+  conceptos, proveedores, clasificaciones, cuentas, puedeEditar, abrirNuevo = false,
 }: {
   cuenta: CuentaCorta;
   movimientos: Movimiento[];
@@ -25,8 +25,16 @@ export default function MovimientosVista({
   clasificaciones: Clasif[];
   cuentas: CuentaCorta[];
   puedeEditar: boolean;
+  abrirNuevo?: boolean;   // ?nuevo=1: abre directo la captura (acceso rápido del celular)
 }) {
-  const [abierto, setAbierto] = useState<Movimiento | "nuevo" | "transferencia" | null>(null);
+  const [abierto, setAbierto] = useState<Movimiento | "nuevo" | "transferencia" | null>(puedeEditar && abrirNuevo ? "nuevo" : null);
+  // Se quita ?nuevo=1 de la dirección para que al recargar no se vuelva a abrir
+  useEffect(() => {
+    if (!abrirNuevo) return;
+    const u = new URL(window.location.href);
+    u.searchParams.delete("nuevo");
+    window.history.replaceState(null, "", u.pathname + u.search);
+  }, [abrirNuevo]);
   const [version, setVersion] = useState(0);
   const base = `/transacciones/${cuenta.cuenta_id}`;
   const { pagina, ...sinPagina } = filtros;
