@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { exigirTitular } from "@/lib/auth";
 
-export type Resultado = { ok?: string; error?: string };
+export type Resultado = { ok?: string; error?: string; contrasena?: string };
 const ROLES = ["titular", "usuario", "pendiente"];
 
 export async function cambiarRol(id: string, rol: string): Promise<Resultado> {
@@ -33,26 +33,56 @@ export async function cambiarPermiso(usuarioId: string, cuentaIds: number[], niv
   return { ok: "Permisos guardados." };
 }
 
-export async function invitarUsuario(_prev: Resultado, formData: FormData): Promise<Resultado> {
+// Contraseña temporal fácil de dictar o mandar por WhatsApp (sin letras que se confunden: 0/O, 1/l/I)
+function contrasenaTemporal() {
+  const letras = "abcdefghjkmnpqrstuvwxyz", digitos = "23456789";
+  const al = (t: string, n: number) => Array.from(crypto.getRandomValues(new Uint32Array(n)), (v) => t[v % t.length]).join("");
+  return `Smart-${al(digitos, 4)}-${al(letras, 4)}`;
+}
+
+// Alta de un usuario con contraseña temporal: al entrar la primera vez, la app le pide cambiarla.
+export async function crearUsuario(_prev: Resultado, formData: FormData): Promise<Resultado> {
   await exigirTitular();
   const correo = String(formData.get("correo") ?? "").trim().toLowerCase();
   const nombre = String(formData.get("nombre") ?? "").trim();
   const rol = String(formData.get("rol") ?? "usuario");
+  const escrita = String(formData.get("contrasena") ?? "").trim();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(correo)) return { error: "Correo no válido." };
   if (!["titular", "usuario"].includes(rol)) return { error: "Rol no válido." };
+  if (escrita && escrita.length < 8) return { error: "La contraseña temporal debe tener al menos 8 caracteres (o déjala vacía y se genera una)." };
+  const contrasena = escrita || contrasenaTemporal();
 
   let admin;
   try {
     admin = createAdminClient();
   } catch {
-    return { error: "Las invitaciones aún no están activadas. Mientras tanto, agrega al usuario desde Supabase (Authentication → Users) y aquí le das permisos." };
+    return { error: "Falta activar el alta de usuarios: agrega SUPABASE_SERVICE_ROLE_KEY en las variables de Vercel." };
   }
-  const { data, error } = await admin.auth.admin.inviteUserByEmail(correo, { data: { nombre: nombre || correo } });
-  if (error || !data.user) return { error: "No se pudo enviar la invitación. ¿Ya existe ese usuario?" };
-
-  // El trigger lo crea como "pendiente": se le asigna el rol elegido.
+  const { data, error } = await admin.auth.admin.createUser({
+    email: correo, password: contrasena, email_confirm: true,
+    user_metadata: { nombre: nombre || correo, debe_cambiar: true },
+  });
+  if (error || !data.user) {
+    return { error: /already|exists|registered/i.test(error?.message ?? "") ? "Ya existe un usuario con ese correo." : `No se pudo crear el usuario (${error?.message ?? "sin respuesta"}).` };
+  }
+  // El trigger lo crea como "pendiente": se le asigna el rol elegido y su nombre
   const supabase = await createClient();
-  await supabase.from("perfiles").update({ rol }).eq("id", data.user.id);
+  await supabase.from("perfiles").update({ rol, ...(nombre ? { nombre } : {}) }).eq("id", data.user.id);
   revalidatePath("/usuarios");
-  return { ok: `Invitación enviada a ${correo}. Ahora elige a qué cuentas tendrá acceso.` };
+  return {
+    ok: `Usuario creado. Mándale estos datos: entra a smartaccount2026.vercel.app con ${correo} y la contraseña temporal ${contrasena}. Al entrar le pedirá cambiarla.${rol === "usuario" ? " Ahora elige a qué cuentas tendrá acceso." : ""}`,
+    contrasena,
+  };
+}
+
+// Nueva contraseña temporal para alguien que la olvidó
+export async function restablecerContrasena(usuarioId: string): Promise<Resultado> {
+  const yo = await exigirTitular();
+  if (usuarioId === yo.id) return { error: "Tu propia contraseña cámbiala en \"Cambiar contraseña\"." };
+  let admin;
+  try { admin = createAdminClient(); } catch { return { error: "Falta activar el alta de usuarios: agrega SUPABASE_SERVICE_ROLE_KEY en las variables de Vercel." }; }
+  const contrasena = contrasenaTemporal();
+  const { error } = await admin.auth.admin.updateUserById(usuarioId, { password: contrasena, user_metadata: { debe_cambiar: true } });
+  if (error) return { error: `No se pudo restablecer (${error.message}).` };
+  return { ok: `Nueva contraseña temporal: ${contrasena}. Al entrar le pedirá cambiarla.`, contrasena };
 }

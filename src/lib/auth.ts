@@ -3,7 +3,7 @@ import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 
 export type Rol = "titular" | "usuario" | "pendiente";
-export type Perfil = { id: string; nombre: string; correo: string | null; rol: Rol };
+export type Perfil = { id: string; nombre: string; correo: string | null; rol: Rol; debeCambiar?: boolean };
 export type Nivel = "ver" | "editar";
 
 // Usuario y perfil actuales (una sola consulta por petición).
@@ -12,7 +12,8 @@ export const obtenerPerfil = cache(async (): Promise<Perfil> => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
   const { data } = await supabase.from("perfiles").select("id,nombre,correo,rol").eq("id", user.id).single();
-  return (data as Perfil) ?? { id: user.id, nombre: user.email ?? "", correo: user.email ?? null, rol: "pendiente" };
+  const debeCambiar = user.user_metadata?.debe_cambiar === true;   // contraseña temporal sin cambiar
+  return { ...((data as Perfil) ?? { id: user.id, nombre: user.email ?? "", correo: user.email ?? null, rol: "pendiente" }), debeCambiar };
 });
 
 export async function exigirTitular() {

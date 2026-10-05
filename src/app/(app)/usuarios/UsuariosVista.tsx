@@ -1,10 +1,10 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, KeyRound } from "lucide-react";
 import type { Perfil } from "@/lib/auth";
 import type { CuentaCorta } from "@/lib/transacciones";
-import { cambiarPermiso, cambiarRol, invitarUsuario, type Resultado } from "./actions";
+import { cambiarPermiso, cambiarRol, crearUsuario, restablecerContrasena, type Resultado } from "./actions";
 
 export type Permiso = { usuario_id: string; cuenta_id: number; nivel: "ver" | "editar" };
 
@@ -19,7 +19,7 @@ export default function UsuariosVista({ usuarios, cuentas, permisos, yo }: {
 }) {
   const [mensaje, setMensaje] = useState<Resultado>({});
   const [pendiente, startTransition] = useTransition();
-  const [estado, invitar, invitando] = useActionState<Resultado, FormData>(invitarUsuario, {});
+  const [estado, invitar, invitando] = useActionState<Resultado, FormData>(crearUsuario, {});
   const [abierto, setAbierto] = useState<string | null>(null);
 
   return (
@@ -45,6 +45,12 @@ export default function UsuariosVista({ usuarios, cuentas, permisos, yo }: {
                   >
                     {ROLES.map((r) => <option key={r.valor} value={r.valor}>{r.etiqueta}</option>)}
                   </select>
+                  {u.id !== yo && (
+                    <button type="button" className="btn-ghost px-2" title="Darle una nueva contraseña temporal" disabled={pendiente} data-restablecer={u.correo ?? u.id}
+                      onClick={() => { if (confirm(`¿Dar una nueva contraseña temporal a ${u.nombre}? La actual dejará de funcionar.`)) startTransition(async () => setMensaje(await restablecerContrasena(u.id))); }}>
+                      <KeyRound className="h-4 w-4" aria-hidden /> <span className="sr-only sm:not-sr-only">Contraseña</span>
+                    </button>
+                  )}
                   {u.rol === "usuario" && (
                     <button type="button" className="btn-secondary" aria-expanded={abierto === u.id} onClick={() => setAbierto(abierto === u.id ? null : u.id)}>
                       Cuentas ({suyos.length}) <ChevronDown className={`h-4 w-4 transition-transform ${abierto === u.id ? "rotate-180" : ""}`} aria-hidden />
@@ -60,15 +66,15 @@ export default function UsuariosVista({ usuarios, cuentas, permisos, yo }: {
         })}
       </div>
       {(mensaje.ok || mensaje.error) && (
-        <p role="status" className={`rounded-lg px-3 py-2 text-sm ${mensaje.error ? "bg-danger-soft text-danger" : "bg-ok-soft text-ok"}`}>
+        <p role="status" data-mensaje className={`select-text rounded-lg px-3 py-2 text-sm ${mensaje.error ? "bg-danger-soft text-danger" : "bg-ok-soft text-ok"}`}>
           {mensaje.error ?? mensaje.ok}
         </p>
       )}
 
       <section className="card p-6" aria-labelledby="invitar">
-        <h2 id="invitar" className="font-semibold">Invitar a alguien</h2>
-        <p className="mt-1 text-sm text-muted">Le llegará un correo para crear su contraseña. Después eliges a qué cuentas tiene acceso.</p>
-        <form action={invitar} className="mt-4 grid gap-4 sm:grid-cols-3">
+        <h2 id="invitar" className="font-semibold">Agregar usuario</h2>
+        <p className="mt-1 text-sm text-muted">Se crea con una contraseña temporal que le mandas tú (por WhatsApp, por ejemplo). La primera vez que entre, la app le pedirá cambiarla. Después eliges a qué cuentas tiene acceso.</p>
+        <form action={invitar} className="mt-4 grid gap-4 sm:grid-cols-2">
           <div>
             <label htmlFor="inv-nombre" className="label">Nombre</label>
             <input id="inv-nombre" name="nombre" className="input" />
@@ -78,16 +84,20 @@ export default function UsuariosVista({ usuarios, cuentas, permisos, yo }: {
             <input id="inv-correo" name="correo" type="email" required className="input" />
           </div>
           <div>
+            <label htmlFor="inv-pass" className="label">Contraseña temporal</label>
+            <input id="inv-pass" name="contrasena" className="input" autoComplete="off" placeholder="Déjala vacía y se genera una" />
+          </div>
+          <div>
             <label htmlFor="inv-rol" className="label">Permiso</label>
             <select id="inv-rol" name="rol" defaultValue="usuario" className="input">
               <option value="usuario">Acceso por cuenta</option>
               <option value="titular">Titular (control total)</option>
             </select>
           </div>
-          <div className="flex items-center gap-3 sm:col-span-3">
-            <button className="btn-primary" disabled={invitando}>{invitando ? "Enviando…" : "Enviar invitación"}</button>
+          <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
+            <button className="btn-primary" disabled={invitando}>{invitando ? "Creando…" : "Crear usuario"}</button>
             {(estado.ok || estado.error) && (
-              <span role="status" className={`text-sm ${estado.error ? "text-danger" : "text-ok"}`}>{estado.error ?? estado.ok}</span>
+              <span role="status" data-alta className={`select-text text-sm ${estado.error ? "text-danger" : "text-ok"}`}>{estado.error ?? estado.ok}</span>
             )}
           </div>
         </form>

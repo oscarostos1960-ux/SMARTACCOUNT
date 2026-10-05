@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { obtenerPerfil, obtenerPermisos } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import Navegacion from "@/components/Navegacion";
@@ -5,6 +6,7 @@ import BarraMovil, { type CuentaRapida } from "@/components/BarraMovil";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const perfil = await obtenerPerfil();
+  if (perfil.debeCambiar) redirect("/cambiar-contrasena");
 
   if (perfil.rol === "pendiente") {
     return (

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
   Home, ArrowLeftRight, FileSearch, CalendarClock, Upload, BarChart3, Landmark, Users, Tag, Tags,
-  Building2, Coins, Layers, ShieldCheck, Menu, X, LogOut, Wand2,
+  Building2, Coins, Layers, ShieldCheck, Menu, X, LogOut, Wand2, KeyRound,
 } from "lucide-react";
 import Logo from "./Logo";
 
@@ -93,6 +93,9 @@ export default function Navegacion({ nombre, rol }: { nombre: string; rol: strin
       <div className="border-t border-border px-5 py-4">
         <p className="truncate text-sm font-medium">{nombre}</p>
         <p className="text-xs capitalize text-muted">{rol === "usuario" ? "Acceso por cuenta" : rol}</p>
+        <Link href="/cambiar-contrasena" onClick={() => setAbierto(false)} className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted hover:text-primary">
+          <KeyRound className="h-3.5 w-3.5" aria-hidden /> Cambiar contraseña
+        </Link>
         <form action="/auth/salir" method="post" className="mt-3">
           <button className="btn-secondary w-full"><LogOut className="h-4 w-4" aria-hidden /> Salir</button>
         </form>
