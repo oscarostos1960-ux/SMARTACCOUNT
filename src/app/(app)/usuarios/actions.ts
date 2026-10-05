@@ -86,3 +86,24 @@ export async function restablecerContrasena(usuarioId: string): Promise<Resultad
   if (error) return { error: `No se pudo restablecer (${error.message}).` };
   return { ok: `Nueva contraseña temporal: ${contrasena}. Al entrar le pedirá cambiarla.`, contrasena };
 }
+
+// Eliminar un usuario: pierde el acceso de inmediato. Sus movimientos capturados se quedan (sin autor);
+// sus lecturas de estados de cuenta pasan al titular para no perder el historial de importaciones.
+export async function eliminarUsuario(usuarioId: string): Promise<Resultado> {
+  const yo = await exigirTitular();
+  if (usuarioId === yo.id) return { error: "No puedes eliminarte a ti mismo." };
+  let admin;
+  try { admin = createAdminClient(); } catch { return { error: "Falta activar el alta de usuarios: agrega SUPABASE_SERVICE_ROLE_KEY en las variables de Vercel." }; }
+  const { data: perfil } = await admin.from("perfiles").select("nombre, rol").eq("id", usuarioId).maybeSingle();
+  if (!perfil) return { error: "No se encontró el usuario." };
+  if (perfil.rol === "titular") {
+    const { count } = await admin.from("perfiles").select("id", { count: "exact", head: true }).eq("rol", "titular");
+    if ((count ?? 0) <= 1) return { error: "Debe quedar al menos un titular." };
+  }
+  const { error: e1 } = await admin.from("importaciones").update({ usuario_id: yo.id }).eq("usuario_id", usuarioId);
+  if (e1) return { error: `No se pudo eliminar (${e1.message}).` };
+  const { error } = await admin.auth.admin.deleteUser(usuarioId);
+  if (error) return { error: `No se pudo eliminar (${error.message}).` };
+  revalidatePath("/usuarios");
+  return { ok: `Se eliminó a ${perfil.nombre}. Ya no puede entrar; lo que capturó se conserva.` };
+}

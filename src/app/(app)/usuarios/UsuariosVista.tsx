@@ -1,10 +1,10 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { ChevronDown, KeyRound } from "lucide-react";
+import { ChevronDown, KeyRound, Trash2 } from "lucide-react";
 import type { Perfil } from "@/lib/auth";
 import type { CuentaCorta } from "@/lib/transacciones";
-import { cambiarPermiso, cambiarRol, crearUsuario, restablecerContrasena, type Resultado } from "./actions";
+import { cambiarPermiso, cambiarRol, crearUsuario, eliminarUsuario, restablecerContrasena, type Resultado } from "./actions";
 
 export type Permiso = { usuario_id: string; cuenta_id: number; nivel: "ver" | "editar" };
 
@@ -49,6 +49,12 @@ export default function UsuariosVista({ usuarios, cuentas, permisos, yo }: {
                     <button type="button" className="btn-ghost px-2" title="Darle una nueva contraseña temporal" disabled={pendiente} data-restablecer={u.correo ?? u.id}
                       onClick={() => { if (confirm(`¿Dar una nueva contraseña temporal a ${u.nombre}? La actual dejará de funcionar.`)) startTransition(async () => setMensaje(await restablecerContrasena(u.id))); }}>
                       <KeyRound className="h-4 w-4" aria-hidden /> <span className="sr-only sm:not-sr-only">Contraseña</span>
+                    </button>
+                  )}
+                  {u.id !== yo && (
+                    <button type="button" className="btn-ghost px-2 text-danger" title="Eliminar usuario" aria-label={`Eliminar a ${u.nombre}`} disabled={pendiente} data-eliminar={u.correo ?? u.id}
+                      onClick={() => { if (confirm(`¿Eliminar a ${u.nombre} (${u.correo})? Ya no podrá entrar. Los movimientos que capturó se conservan.`)) startTransition(async () => setMensaje(await eliminarUsuario(u.id))); }}>
+                      <Trash2 className="h-4 w-4" aria-hidden />
                     </button>
                   )}
                   {u.rol === "usuario" && (
