@@ -359,7 +359,8 @@ export function quitarMensualidadesSobrantes(datos: EstadoIA): EstadoIA {
     candidatos.forEach((c, k) => { if (mask & (1 << k)) suma += c.m.cargo; });
     if (Math.abs(redondea(suma) - sobra) < 0.015) {
       const quitar = new Set(candidatos.filter((_, k) => mask & (1 << k)).map((c) => c.i));
-      const notas = [datos.notas, `Se quitaron ${quitar.size} mensualidad(es) de meses sin intereses que el banco ya había sumado completas en el mes de la compra.`].filter(Boolean).join(" ");
+      const nombres = candidatos.filter((_, k) => mask & (1 << k)).map((c) => `"${c.m.descripcion}"`).join(", ");
+      const notas = [datos.notas, `AJUSTE AUTOMÁTICO: se quitó ${nombres} porque en este formato el banco ya sumó la compra completa en el mes en que se hizo (no se vuelve a cobrar); sin ese renglón el estado cuadra exacto con el banco.`].filter(Boolean).join(" ");
       return { ...datos, movimientos: datos.movimientos.filter((_, i) => !quitar.has(i)), notas };
     }
   }

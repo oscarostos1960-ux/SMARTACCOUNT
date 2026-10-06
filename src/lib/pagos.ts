@@ -66,6 +66,8 @@ export type Vencimiento = {
   folio: number | null;
   cuenta_pago_id: number | null;
   cuenta_pago: string | null;
+  leyenda1: string | null;
+  leyenda2: string | null;
 };
 
 export function describirFrecuencia(p: Pick<PagoProgramado, "frecuencia" | "dias_mes" | "dia_semana" | "fecha_inicio">) {

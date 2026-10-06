@@ -53,6 +53,8 @@ export default function DialogoVencimiento({
           <div><dt className="text-muted">Estado</dt><dd className="font-medium">{estadoTexto}</dd></div>
           {v.concepto && <div><dt className="text-muted">Concepto</dt><dd>{v.concepto}</dd></div>}
           <div><dt className="text-muted">Cuenta</dt><dd>{v.cuenta ?? "Sin cuenta fija"}</dd></div>
+          {v.leyenda1 && <div className="col-span-2 sm:col-span-3"><dt className="text-muted">Leyenda 1</dt><dd>{v.leyenda1}</dd></div>}
+          {v.leyenda2 && <div className="col-span-2 sm:col-span-3"><dt className="text-muted">Leyenda 2</dt><dd>{v.leyenda2}</dd></div>}
           {plan && <div><dt className="text-muted">Frecuencia</dt><dd>{describirFrecuencia(plan)}</dd></div>}
           {v.descripcion && <div className="col-span-2 sm:col-span-3"><dt className="text-muted">Transacción</dt><dd>{v.descripcion}</dd></div>}
         </dl>

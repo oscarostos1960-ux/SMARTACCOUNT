@@ -324,6 +324,11 @@ function Fila({ v, hoy, puedePagar, preparando, seleccionado, onSeleccionar, onP
           <span className="block truncate text-xs text-muted">
             {[v.concepto, v.cuenta, v.notas].filter(Boolean).join(" · ") || v.descripcion}
           </span>
+          {(v.leyenda1 || v.leyenda2) && (
+            <span className="block truncate text-xs text-muted" data-leyendas>
+              {[v.leyenda1, v.leyenda2].filter(Boolean).join(" · ")}
+            </span>
+          )}
         </span>
         <span className="shrink-0 text-right">
           <span className={`num block text-sm font-semibold ${v.tipo === "abono" ? "text-ok" : ""}`}>
