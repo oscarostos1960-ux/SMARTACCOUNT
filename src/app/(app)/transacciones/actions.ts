@@ -318,6 +318,34 @@ export async function enviarAviso(movimientoId: number, canales: Canal[]): Promi
   return { resultados };
 }
 
+// Avisos que esperaban el comprobante: se envían en cuanto el movimiento ya tiene documentos.
+export async function enviarAvisosEnEspera(movimientoId: number): Promise<{ resultados?: ResultadoAviso[]; error?: string }> {
+  const supabase = await createClient();
+  const { data: mov } = await supabase.from("transacciones").select("cuenta_id, aviso_whatsapp, aviso_correo").eq("id", movimientoId).maybeSingle();
+  if (!mov) return { error: "El movimiento ya no existe." };
+  const canales: Canal[] = [];
+  if (mov.aviso_whatsapp === "espera") canales.push("whatsapp");
+  if (mov.aviso_correo === "espera") canales.push("correo");
+  if (!canales.length) return {};
+  const permisos = await obtenerPermisos();
+  if (!permisos.puedeEditar(Number(mov.cuenta_id))) return {};
+  const { count } = await supabase.from("documentos").select("id", { count: "exact", head: true }).eq("transaccion_id", movimientoId);
+  if (!count) return {};
+  const resultados = await enviarAvisoMovimiento(supabase, movimientoId, canales);
+  refrescar();
+  return { resultados };
+}
+
+// Canales que esperan comprobante para salir
+export async function avisosEnEspera(movimientoId: number): Promise<Canal[]> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("transacciones").select("aviso_whatsapp, aviso_correo").eq("id", movimientoId).maybeSingle();
+  const r: Canal[] = [];
+  if (data?.aviso_whatsapp === "espera") r.push("whatsapp");
+  if (data?.aviso_correo === "espera") r.push("correo");
+  return r;
+}
+
 export async function listarAvisos(movimientoId: number): Promise<Aviso[]> {
   const supabase = await createClient();
   const { data } = await supabase.from("avisos").select("id, canal, destino, estado, detalle, created_at")

@@ -13,6 +13,13 @@
   --primary-hover: #17304f;
   --primary-soft: #e6edf6;
   --accent: #e8801c;
+  --accent-strong: #b85508;      /* naranja para botones y rellenos con texto blanco (contraste AA) */
+  --accent-strong-hover: #9c4706;
+  --accent-soft: #fdebd9;
+  --nav: #1f3a5f;                /* menú lateral */
+  --nav-text: #ffffff;
+  --nav-muted: #9fb3cf;
+  --nav-activo: #f2a65a;
   --ok: #1e7b4f;
   --ok-soft: #e3f3ea;
   --danger: #b3261e;
@@ -32,13 +39,20 @@
   --color-primary-hover: var(--primary-hover);
   --color-primary-soft: var(--primary-soft);
   --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-strong-hover: var(--accent-strong-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-nav: var(--nav);
+  --color-nav-text: var(--nav-text);
+  --color-nav-muted: var(--nav-muted);
+  --color-nav-activo: var(--nav-activo);
   --color-ok: var(--ok);
   --color-ok-soft: var(--ok-soft);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
   --color-warn: var(--warn);
   --color-warn-soft: var(--warn-soft);
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: var(--font-manrope), var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
 body {
@@ -50,11 +64,11 @@ body {
 
 /* Componentes base (utilidades propias de Tailwind v4) */
 @utility btn { @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary; }
-@utility btn-primary { @apply btn bg-primary text-white hover:bg-primary-hover; }
+@utility btn-primary { @apply btn bg-accent-strong text-white hover:bg-accent-strong-hover; }
 @utility btn-secondary { @apply btn border border-border bg-surface text-text hover:bg-surface-2; }
 @utility btn-ghost { @apply btn text-muted hover:bg-surface-2 hover:text-text; }
 @utility btn-danger { @apply btn bg-danger text-white hover:opacity-90; }
 @utility input { @apply w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-muted/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20; }
 @utility label { @apply mb-1 block text-sm font-medium text-text; }
-@utility card { @apply rounded-xl border border-border bg-surface; }
+@utility card { @apply rounded-2xl border border-border bg-surface; }
 @utility badge { @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium; }

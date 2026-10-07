@@ -43,7 +43,11 @@ function tamano(bytes: number | null) {
   return bytes > 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
-export default function Documentos({ cuentaId, movimientoId, puedeEditar }: { cuentaId: number; movimientoId: number; puedeEditar: boolean }) {
+export default function Documentos({ cuentaId, movimientoId, puedeEditar, onSubidos }: {
+  cuentaId: number; movimientoId: number; puedeEditar: boolean;
+  /** Se llama cuando se termina de subir al menos un archivo (p. ej. para enviar avisos en espera) */
+  onSubidos?: () => void;
+}) {
   const [docs, setDocs] = useState<Documento[] | null>(null);
   const [error, setError] = useState<string>();
   const [subiendo, setSubiendo] = useState(false);
@@ -65,10 +69,12 @@ export default function Documentos({ cuentaId, movimientoId, puedeEditar }: { cu
     if (!archivos?.length) return;
     setSubiendo(true);
     setError(undefined);
-    const errores = await subirArchivos(cuentaId, movimientoId, [...archivos]);
+    const lista = [...archivos];
+    const errores = await subirArchivos(cuentaId, movimientoId, lista);
     if (errores.length) setError(errores.join(" "));
     await recargar();
     setSubiendo(false);
+    if (errores.length < lista.length) onSubidos?.();
     if (entrada.current) entrada.current.value = "";
   }
 

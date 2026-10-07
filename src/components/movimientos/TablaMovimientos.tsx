@@ -202,13 +202,13 @@ function Insignias({ m }: { m: Movimiento }) {
       {m.es_ajuste && <span className="badge bg-warn-soft text-warn"><Scale className="mr-1 h-3 w-3" aria-hidden />Ajuste</span>}
       {m.transferencia_id && <span className="badge bg-primary-soft text-primary"><ArrowLeftRight className="mr-1 h-3 w-3" aria-hidden />Transferencia</span>}
       {m.aviso_whatsapp && (
-        <span className={`badge ${m.aviso_whatsapp === "enviado" ? "bg-ok-soft text-ok" : "bg-surface-2 text-muted"}`}>
-          <MessageCircle className="mr-1 h-3 w-3" aria-hidden />WhatsApp {m.aviso_whatsapp}
+        <span className={`badge ${m.aviso_whatsapp === "enviado" ? "bg-ok-soft text-ok" : m.aviso_whatsapp === "espera" ? "bg-warn-soft text-warn" : "bg-surface-2 text-muted"}`}>
+          <MessageCircle className="mr-1 h-3 w-3" aria-hidden />WhatsApp {m.aviso_whatsapp === "espera" ? "en espera de comprobante" : m.aviso_whatsapp}
         </span>
       )}
       {m.aviso_correo && (
-        <span className={`badge ${m.aviso_correo === "enviado" ? "bg-ok-soft text-ok" : "bg-surface-2 text-muted"}`}>
-          <Mail className="mr-1 h-3 w-3" aria-hidden />Correo {m.aviso_correo}
+        <span className={`badge ${m.aviso_correo === "enviado" ? "bg-ok-soft text-ok" : m.aviso_correo === "espera" ? "bg-warn-soft text-warn" : "bg-surface-2 text-muted"}`}>
+          <Mail className="mr-1 h-3 w-3" aria-hidden />Correo {m.aviso_correo === "espera" ? "en espera de comprobante" : m.aviso_correo}
         </span>
       )}
     </span>

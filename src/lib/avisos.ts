@@ -11,7 +11,9 @@ import { dinero, fecha } from "@/lib/formato";
 // por WhatsApp (plantillas aprobadas de 1msg.io) y por correo (SMTP).
 
 export type Canal = "whatsapp" | "correo";
-export type ResultadoAviso = { canal: Canal; ok: boolean; destino: string | null; mensaje: string; tecnico?: string };
+export type ResultadoAviso = { canal: Canal; ok: boolean; destino: string | null; mensaje: string; tecnico?: string; espera?: boolean };
+const COLUMNA: Record<Canal, "aviso_whatsapp" | "aviso_correo"> = { whatsapp: "aviso_whatsapp", correo: "aviso_correo" };
+export const MENSAJE_ESPERA = "En espera: se enviará solo en cuanto adjuntes el comprobante de pago.";
 
 type DatosAviso = {
   id: number;
@@ -194,6 +196,17 @@ async function enviarCorreo(supabase: SupabaseClient, d: DatosAviso, png: Buffer
 export async function enviarAvisoMovimiento(supabase: SupabaseClient, movimientoId: number, canales: Canal[]): Promise<ResultadoAviso[]> {
   const d = await cargarDatos(supabase, movimientoId);
   if (!d) return canales.map((canal) => ({ canal, ok: false, destino: null, mensaje: "No se encontró el movimiento." }));
+
+  // Candado: sin comprobante adjunto no sale nada; queda en espera y se envía al adjuntarlo
+  if (!d.documentos.length) {
+    const espera: Record<string, string> = {};
+    for (const canal of canales) espera[COLUMNA[canal]] = "espera";
+    await supabase.from("transacciones").update(espera).eq("id", movimientoId);
+    return canales.map((canal) => ({
+      canal, ok: false, espera: true, mensaje: MENSAJE_ESPERA,
+      destino: canal === "correo" ? d.correo : telefonoWhatsApp(d.celular) ?? d.celular,
+    }));
+  }
 
   const resultados: ResultadoAviso[] = [];
   let png: Buffer | null = null;

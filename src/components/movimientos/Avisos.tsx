@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { CheckCircle2, Mail, MessageCircle, Send, XCircle } from "lucide-react";
-import { enviarAviso, listarAvisos, type Aviso } from "@/app/(app)/transacciones/actions";
+import { CheckCircle2, Clock, Mail, MessageCircle, Send, XCircle } from "lucide-react";
+import { avisosEnEspera, enviarAviso, enviarAvisosEnEspera, listarAvisos, type Aviso } from "@/app/(app)/transacciones/actions";
 import type { Canal, ResultadoAviso } from "@/lib/avisos";
 
 const NOMBRE: Record<Canal, string> = { whatsapp: "WhatsApp", correo: "Correo" };
@@ -11,9 +11,9 @@ export function ListaResultados({ resultados }: { resultados: ResultadoAviso[] }
   return (
     <ul className="space-y-1.5" aria-live="polite">
       {resultados.map((r) => (
-        <li key={r.canal} className={`flex items-start gap-2 rounded-lg px-3 py-2 text-sm ${r.ok ? "bg-ok-soft text-ok" : "bg-danger-soft text-danger"}`}
-          data-aviso={r.canal} data-ok={r.ok}>
-          {r.ok ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /> : <XCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />}
+        <li key={r.canal} className={`flex items-start gap-2 rounded-lg px-3 py-2 text-sm ${r.ok ? "bg-ok-soft text-ok" : r.espera ? "bg-warn-soft text-warn" : "bg-danger-soft text-danger"}`}
+          data-aviso={r.canal} data-ok={r.ok} data-espera={r.espera ? "1" : undefined}>
+          {r.ok ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /> : r.espera ? <Clock className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /> : <XCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />}
           <span><strong>{NOMBRE[r.canal]}{r.destino ? ` (${r.destino})` : ""}:</strong> {r.mensaje}</span>
         </li>
       ))}
@@ -26,8 +26,10 @@ const fechaHora = (iso: string) => new Intl.DateTimeFormat("es-MX", {
 }).format(new Date(iso));
 
 // Sección "Avisos al proveedor" dentro de un movimiento ya guardado: reenviar y ver historial.
-export default function AvisosMovimiento({ movimientoId, puedeEditar }: { movimientoId: number; puedeEditar: boolean }) {
+// `revision` cambia cada vez que se adjuntan documentos: si había avisos en espera, salen en ese momento.
+export default function AvisosMovimiento({ movimientoId, puedeEditar, revision = 0 }: { movimientoId: number; puedeEditar: boolean; revision?: number }) {
   const [historial, setHistorial] = useState<Aviso[] | null>(null);
+  const [espera, setEspera] = useState<Canal[]>([]);
   const [resultados, setResultados] = useState<ResultadoAviso[]>();
   const [error, setError] = useState<string>();
   const [enviando, start] = useTransition();
@@ -35,8 +37,23 @@ export default function AvisosMovimiento({ movimientoId, puedeEditar }: { movimi
   useEffect(() => {
     let vivo = true;
     listarAvisos(movimientoId).then((a) => { if (vivo) setHistorial(a); });
+    avisosEnEspera(movimientoId).then((c) => { if (vivo) setEspera(c); });
     return () => { vivo = false; };
   }, [movimientoId]);
+
+  // Al adjuntar el comprobante salen solos los avisos que estaban en espera
+  useEffect(() => {
+    if (!revision) return;
+    let vivo = true;
+    enviarAvisosEnEspera(movimientoId).then(async (r) => {
+      if (!vivo) return;
+      if (r.error) setError(r.error);
+      if (r.resultados) setResultados(r.resultados);
+      const [h, c] = await Promise.all([listarAvisos(movimientoId), avisosEnEspera(movimientoId)]);
+      if (vivo) { setHistorial(h); setEspera(c); }
+    });
+    return () => { vivo = false; };
+  }, [movimientoId, revision]);
 
   function enviar(canales: Canal[]) {
     setError(undefined);
@@ -46,6 +63,7 @@ export default function AvisosMovimiento({ movimientoId, puedeEditar }: { movimi
       if (r.error) setError(r.error);
       if (r.resultados) setResultados(r.resultados);
       setHistorial(await listarAvisos(movimientoId));
+      setEspera(await avisosEnEspera(movimientoId));
     });
   }
 
@@ -67,13 +85,19 @@ export default function AvisosMovimiento({ movimientoId, puedeEditar }: { movimi
         )}
       </div>
       {enviando && <p className="mb-2 text-sm text-muted">Enviando…</p>}
+      {espera.length > 0 && !resultados && (
+        <p className="mb-2 flex items-start gap-2 rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn" data-en-espera>
+          <Clock className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          <span><strong>{espera.map((c) => NOMBRE[c]).join(" y ")} en espera:</strong> se enviará solo en cuanto adjuntes el comprobante de pago.</span>
+        </p>
+      )}
       {resultados && <div className="mb-2"><ListaResultados resultados={resultados} /></div>}
       {error && <p role="alert" className="mb-2 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
       {historial === null ? (
         <p className="text-sm text-muted">Cargando…</p>
       ) : historial.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border px-3 py-3 text-sm text-muted">
-          No se ha enviado aviso.{puedeEditar && " Se manda la imagen del pago y los documentos adjuntos."}
+          No se ha enviado aviso.{puedeEditar && " Se manda la imagen del pago y los documentos adjuntos; sin comprobante adjunto queda en espera."}
         </p>
       ) : (
         <ul className="divide-y divide-border rounded-lg border border-border text-sm">

@@ -19,7 +19,7 @@ export type Comprobante = {
   leyenda2: string | null;
   canal: "whatsapp" | "correo";
   destino: string | null;
-  estado: "enviado" | "error" | "pendiente";
+  estado: "enviado" | "error" | "pendiente" | "espera";
   detalle: string | null;
   enviado_en: string | null;
   fecha_envio: string;
@@ -30,7 +30,7 @@ export type FiltrosComprobantes = {
   desde?: string;
   hasta?: string;
   canal?: "whatsapp" | "correo";
-  estado?: "enviado" | "error" | "pendiente";
+  estado?: "enviado" | "error" | "pendiente" | "espera";
   q?: string;
   pagina: number;
 };
@@ -48,7 +48,7 @@ export function leerFiltrosComprobantes(sp: Record<string, string | string[] | u
     desde: fechaOk(uno("desde")),
     hasta: fechaOk(uno("hasta")),
     canal: canal === "whatsapp" || canal === "correo" ? canal : undefined,
-    estado: estado === "enviado" || estado === "error" || estado === "pendiente" ? estado : undefined,
+    estado: estado === "enviado" || estado === "error" || estado === "pendiente" || estado === "espera" ? estado : undefined,
     q: q || undefined,
     pagina: Math.max(1, Math.floor(Number(uno("pagina")) || 1)),
   };
@@ -81,7 +81,7 @@ export function aplicarFiltros<Q extends { gte: any; lte: any; eq: any; or: any 
 }
 
 export const CANAL_TEXTO = { whatsapp: "WhatsApp", correo: "Correo" } as const;
-export const ESTADO_TEXTO = { enviado: "Enviado", error: "Con error", pendiente: "Pendiente" } as const;
+export const ESTADO_TEXTO = { enviado: "Enviado", error: "Con error", pendiente: "Pendiente", espera: "En espera de comprobante" } as const;
 
 // "2026-10-07T18:05:00Z" -> "7 oct 2026, 12:05" en hora de la Ciudad de México
 export function fechaHoraCDMX(iso: string) {

@@ -93,6 +93,7 @@ export function DialogoMovimiento({
   const [errorArchivos, setErrorArchivos] = useState<string>();
   const [enviandoAviso, setEnviandoAviso] = useState(false);
   const [resultadoAvisos, setResultadoAvisos] = useState<ResultadoAviso[]>();
+  const [revisionAvisos, setRevisionAvisos] = useState(0);
   const terminado = !!(errorArchivos || resultadoAvisos);
   const dialogo = useRef<HTMLDialogElement>(null);
   const cerrar = () => dialogo.current?.close();
@@ -187,7 +188,9 @@ export function DialogoMovimiento({
           {p && !m && (
             <p className="flex items-start gap-2 rounded-lg bg-primary-soft px-3 py-2 text-sm text-primary sm:col-span-6">
               <Sparkles className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-              <span>{p === inicial && aviso ? aviso : <>Datos copiados del último movimiento con este proveedor (folio {p.folio_origen}, {fmtFecha(p.fecha_origen)}{p.cuenta_origen !== cuentaSel.nombre ? `, ${p.cuenta_origen}` : ""}). Revisa y cambia lo que necesites.</>}</span>
+              <span>{(p === inicial || !p.folio_origen) && aviso ? aviso : !p.folio_origen
+                ? <>Datos tomados del pago programado ({fmtFecha(p.fecha_origen)}). Revisa y cambia lo que necesites.</>
+                : <>Datos copiados del último movimiento con este proveedor (folio {p.folio_origen}, {fmtFecha(p.fecha_origen)}{p.cuenta_origen !== cuentaSel.nombre ? `, ${p.cuenta_origen}` : ""}). Revisa y cambia lo que necesites.</>}</span>
             </p>
           )}
           {vencimientoId && <input type="hidden" name="vencimiento_id" value={vencimientoId} />}
@@ -277,8 +280,8 @@ export function DialogoMovimiento({
 
           {m ? (
             <>
-              <Documentos cuentaId={cuenta.cuenta_id} movimientoId={m.id} puedeEditar={puedeEditar} />
-              {m.proveedor_id && <AvisosMovimiento movimientoId={m.id} puedeEditar={puedeEditar} />}
+              <Documentos cuentaId={cuenta.cuenta_id} movimientoId={m.id} puedeEditar={puedeEditar} onSubidos={() => setRevisionAvisos((x) => x + 1)} />
+              {m.proveedor_id && <AvisosMovimiento movimientoId={m.id} puedeEditar={puedeEditar} revision={revisionAvisos} />}
             </>
           ) : (
             <div

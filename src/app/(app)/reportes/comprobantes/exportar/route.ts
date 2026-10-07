@@ -28,7 +28,7 @@ export async function GET(request: Request) {
   const lineas = [encabezado.map(celda).join(",")];
   for (const r of filas) {
     lineas.push([
-      r.enviado_en ? fechaHoraCDMX(r.enviado_en) : r.estado === "pendiente" ? "" : `${r.fecha} (sistema anterior)`,
+      r.enviado_en ? fechaHoraCDMX(r.enviado_en) : r.estado === "pendiente" || r.estado === "espera" ? "" : `${r.fecha} (sistema anterior)`,
       CANAL_TEXTO[r.canal], ESTADO_TEXTO[r.estado], r.proveedor, r.destino, r.enviado_por, r.fecha, r.cuenta, r.folio,
       (Number(r.cargo) || Number(r.abono)).toFixed(2), r.moneda, r.concepto, r.descripcion, r.leyenda1, r.leyenda2, r.estado === "error" ? r.detalle : "",
     ].map(celda).join(","));

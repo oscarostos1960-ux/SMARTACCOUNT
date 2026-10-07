@@ -21,11 +21,11 @@ export default async function ComprobantesPage(props: PageProps<"/reportes/compr
     if (canal) c = c.eq("canal", canal);
     return c;
   };
-  const [lista, wa, co, err, pen] = await Promise.all([
+  const [lista, wa, co, err, esp] = await Promise.all([
     aplicarFiltros(vista().select("*", { count: "exact" }), f)
       .order("fecha_envio", { ascending: false }).order("enviado_en", { ascending: false, nullsFirst: false }).order("folio", { ascending: false })
       .range(desdeFila, desdeFila + POR_PAGINA_COMPROBANTES - 1),
-    contar("whatsapp", "enviado"), contar("correo", "enviado"), contar(null, "error"), contar(null, "pendiente"),
+    contar("whatsapp", "enviado"), contar("correo", "enviado"), contar(null, "error"), contar(null, "espera"),
   ]);
   const filas = (lista.data ?? []) as Comprobante[];
   const total = lista.count ?? 0;
@@ -35,7 +35,7 @@ export default async function ComprobantesPage(props: PageProps<"/reportes/compr
     { texto: "Por WhatsApp", n: wa.count ?? 0, filtro: { canal: "whatsapp", estado: "enviado" }, icono: MessageCircle, tono: "text-ok" },
     { texto: "Por correo", n: co.count ?? 0, filtro: { canal: "correo", estado: "enviado" }, icono: Mail, tono: "text-ok" },
     { texto: "Con error", n: err.count ?? 0, filtro: { estado: "error" }, icono: AlertTriangle, tono: "text-danger" },
-    { texto: "Pendientes", n: pen.count ?? 0, filtro: { estado: "pendiente" }, icono: Clock, tono: "text-warn" },
+    { texto: "Esperan comprobante", n: esp.count ?? 0, filtro: { estado: "espera" }, icono: Clock, tono: "text-warn" },
   ];
   const base = { ...f, canal: undefined, estado: undefined };
 
@@ -77,7 +77,7 @@ export default async function ComprobantesPage(props: PageProps<"/reportes/compr
         <div>
           <label htmlFor="c-estado" className="label">Estado</label>
           <select id="c-estado" name="estado" defaultValue={f.estado ?? ""} className="input">
-            <option value="">Todos</option><option value="enviado">Enviado</option><option value="error">Con error</option><option value="pendiente">Pendiente</option>
+            <option value="">Todos</option><option value="enviado">Enviado</option><option value="error">Con error</option><option value="espera">En espera de comprobante</option><option value="pendiente">Pendiente</option>
           </select>
         </div>
         <div className="col-span-2 flex justify-end gap-2 sm:col-span-6">
@@ -131,7 +131,7 @@ function Fila({ r }: { r: Comprobante }) {
   const tono = r.estado === "enviado" ? "bg-ok-soft text-ok" : r.estado === "error" ? "bg-danger-soft text-danger" : "bg-warn-soft text-warn";
   const importe = Number(r.cargo) || Number(r.abono);
   const cuando = r.enviado_en ? fechaHoraCDMX(r.enviado_en)
-    : r.estado === "pendiente" ? "Aún no se envía" : `${fecha(r.fecha)} · sistema anterior`;
+    : r.estado === "espera" ? "Sale al adjuntar el comprobante" : r.estado === "pendiente" ? "Aún no se envía" : `${fecha(r.fecha)} · sistema anterior`;
   return (
     <li className="grid grid-cols-1 gap-x-4 gap-y-1 px-4 py-3 text-sm sm:grid-cols-[11rem_1fr_auto]" data-comprobante={r.id}>
       <div className="flex flex-wrap items-center gap-1.5 sm:flex-col sm:items-start">
