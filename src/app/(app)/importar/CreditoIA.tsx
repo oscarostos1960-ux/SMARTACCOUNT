@@ -1,6 +1,6 @@
 import "server-only";
 import { gateway } from "ai";
-import { Sparkles } from "lucide-react";
+import { ExternalLink, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 
 // Saldo del crédito de IA (Vercel AI Gateway) con el que se leen los estados de cuenta.
@@ -20,6 +20,9 @@ async function leerCredito(): Promise<{ saldo: number; usado: number } | null> {
     return null;
   }
 }
+
+// Página de Vercel donde se compra más crédito (AI Gateway → botón del saldo, arriba a la derecha)
+const URL_RECARGA = process.env.NEXT_PUBLIC_URL_RECARGA_IA || "https://vercel.com/micarteraia2/~/ai-gateway";
 
 const usd = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
 
@@ -55,6 +58,11 @@ export default async function CreditoIA() {
           ≈ {usd(porLectura)} por estado de cuenta{alcanza !== null && <> · alcanza para unos <strong className="text-text">{alcanza.toLocaleString("es-MX")}</strong> más</>}
         </p>
       )}
+      <a href={URL_RECARGA} target="_blank" rel="noopener noreferrer" data-recargar-ia
+        className={`${pct < 25 ? "btn-primary" : "btn-secondary"} shrink-0 text-sm`}
+        title="Abre Vercel: en AI Gateway haz clic en el saldo (arriba a la derecha) para agregar crédito">
+        Recargar crédito <ExternalLink className="h-4 w-4" aria-hidden />
+      </a>
     </section>
   );
 }
