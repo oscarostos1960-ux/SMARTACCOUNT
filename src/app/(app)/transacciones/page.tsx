@@ -67,7 +67,10 @@ export default async function TransaccionesPage(props: PageProps<"/transacciones
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="truncate font-medium">{c.nombre}</p>
-                        <p className="truncate text-xs text-muted">{[c.banco, c.tipo_cuenta, c.moneda].filter(Boolean).join(" · ")}</p>
+                        <p className="truncate text-xs text-muted">
+                          {[c.banco, c.tipo_cuenta, c.moneda].filter(Boolean).join(" · ")}
+                          {c.terminacion && <> · <span className="num font-medium text-text" data-terminacion>•••• {c.terminacion}</span></>}
+                        </p>
                       </div>
                       <ChevronRight className="h-4 w-4 shrink-0 text-muted group-hover:text-primary" aria-hidden />
                     </div>

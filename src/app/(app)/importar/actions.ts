@@ -59,12 +59,26 @@ async function construirAnalisis(supabase: Supa, imp: {
   let historial: Historico[] = [];
   if (cuentaId) {
     const [exR, histR] = await Promise.all([
-      supabase.from("transacciones").select("id, folio, fecha, cargo, abono, descripcion").eq("cuenta_id", cuentaId)
+      supabase.from("transacciones").select("id, folio, fecha, cargo, abono, descripcion, importacion_id").eq("cuenta_id", cuentaId)
         .gte("fecha", desde).lte("fecha", hasta).order("fecha").limit(1000),
       supabase.from("transacciones").select("descripcion, leyenda1, leyenda2, leyenda3, proveedor_id, concepto_id")
         .eq("cuenta_id", cuentaId).order("fecha", { ascending: false }).limit(1000),
     ]);
-    existentes = (exR.data ?? []).map((e) => ({ id: Number(e.id), folio: Number(e.folio), fecha: String(e.fecha), cargo: Number(e.cargo), abono: Number(e.abono), descripcion: e.descripcion ?? "" }));
+    // Estados de cuenta de donde vienen los movimientos existentes: si su periodo no se cruza con el de éste, no son duplicados
+    const idsImp = [...new Set((exR.data ?? []).map((e) => e.importacion_id).filter((x): x is number => x != null && Number(x) !== imp.id))];
+    const otros = new Set<number>();
+    if (idsImp.length && datos.periodo_inicio && datos.periodo_fin) {
+      const { data: imps } = await supabase.from("importaciones").select("id, periodo_inicio, periodo_fin").in("id", idsImp);
+      for (const x of imps ?? []) {
+        if (!x.periodo_inicio || !x.periodo_fin) continue;
+        const seCruzan = String(x.periodo_inicio) <= datos.periodo_fin && String(x.periodo_fin) >= datos.periodo_inicio;
+        if (!seCruzan) otros.add(Number(x.id));
+      }
+    }
+    existentes = (exR.data ?? []).map((e) => ({
+      id: Number(e.id), folio: Number(e.folio), fecha: String(e.fecha), cargo: Number(e.cargo), abono: Number(e.abono), descripcion: e.descripcion ?? "",
+      deOtroEstado: e.importacion_id != null && otros.has(Number(e.importacion_id)),
+    }));
     historial = (histR.data ?? []).filter((h) => h.proveedor_id || h.concepto_id)
       .map((h) => ({ texto: [h.descripcion, h.leyenda1, h.leyenda2, h.leyenda3].filter(Boolean).join(" "), proveedor_id: h.proveedor_id, concepto_id: h.concepto_id }));
   }

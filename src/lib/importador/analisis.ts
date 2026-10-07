@@ -3,7 +3,11 @@
 import type { Cuadre, EstadoIA, FilaImportacion, MovimientoIA } from "./esquema";
 import { prepararNombres, sugerirMovimiento, type ProveedorCat, type Regla, type Sugerencia } from "./sugerencias";
 
-export type Existente = { id: number; folio: number; fecha: string; cargo: number; abono: number; descripcion?: string };
+export type Existente = {
+  id: number; folio: number; fecha: string; cargo: number; abono: number; descripcion?: string;
+  /** Vino de otro estado de cuenta de la misma cuenta cuyo periodo no se cruza con éste: es otro cobro, nunca un duplicado */
+  deOtroEstado?: boolean;
+};
 export type Historico = { texto: string; proveedor_id: number | null; concepto_id: number | null };
 
 const redondea = (n: number) => Math.round(n * 100) / 100;
@@ -65,6 +69,8 @@ function otraMensualidad(a?: string | null, b?: string | null) {
 
 export function buscarDuplicados(movs: MovimientoIA[], existentes: Existente[]) {
   const usados = new Set<number>();
+  // Lo importado de otro estado de cuenta (otro periodo) ya es un cobro distinto: p. ej. dos casetas iguales en días cercanos
+  existentes = existentes.filter((e) => !e.deOtroEstado);
   const resultado: ({ estado: "duplicado" | "posible"; folio: number; fecha: string } | null)[] = movs.map(() => null);
   const mismo = (m: MovimientoIA, e: Existente) => Math.abs(m.cargo - e.cargo) < 0.005 && Math.abs(m.abono - e.abono) < 0.005
     && !otraMensualidad(m.descripcion, e.descripcion);
