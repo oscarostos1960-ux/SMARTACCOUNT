@@ -19,7 +19,7 @@ const SECCIONES: { titulo?: string; items: Item[]; soloTitular?: boolean }[] = [
       { href: "/reporte", texto: "Reporte de movimientos", icono: FileSearch },
       { href: "/pagos-programados", texto: "Pagos programados", icono: CalendarClock },
       { href: "/importar", texto: "Importar estados de cuenta", icono: Upload },
-      { href: "/reportes", texto: "Reportes", icono: BarChart3, proximamente: true },
+      { href: "/reportes", texto: "Reportes", icono: BarChart3 },
     ],
   },
   {
@@ -57,7 +57,7 @@ export default function Navegacion({ nombre, rol }: { nombre: string; rol: strin
             {s.titulo && <p className="mb-1 px-3 text-xs font-semibold uppercase tracking-wide text-muted">{s.titulo}</p>}
             <ul className="space-y-0.5">
               {s.items.map((it) => {
-                const activo = it.href === "/" ? ruta === "/" : ruta.startsWith(it.href);
+                const activo = it.href === "/" ? ruta === "/" : ruta === it.href || ruta.startsWith(it.href + "/");
                 const Icono = it.icono;
                 if (it.proximamente) {
                   return (
