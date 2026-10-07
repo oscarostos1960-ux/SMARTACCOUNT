@@ -26,7 +26,7 @@ export default async function ImportarPage() {
   return (
     <div className="mx-auto max-w-7xl">
       <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Importar estados de cuenta</h1>
+        <h1 className="text-3xl font-extrabold tracking-tight text-primary">Importar estados de cuenta</h1>
         <p className="mt-1 text-sm text-muted">Sube el PDF o XML de tu banco: la IA lee los movimientos, revisa que cuadren y te los muestra antes de guardarlos.</p>
       </header>
       {permisos.esTitular && <div className="mb-4"><Suspense fallback={null}><CreditoIA /></Suspense></div>}

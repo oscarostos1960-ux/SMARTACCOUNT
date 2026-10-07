@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { obtenerPermisos } from "@/lib/auth";
-import { dinero } from "@/lib/formato";
+import { EncabezadoCuenta } from "@/components/Plastico";
 import { cargarCatalogosMovimiento } from "@/lib/catalogos-movimiento";
 import {
   leerFiltros, parametrosBusqueda, parametrosFiltro, POR_PAGINA,
@@ -36,7 +36,7 @@ export default async function CuentaPage(props: PageProps<"/transacciones/[cuent
     supabase.rpc("totales_movimientos", parametrosFiltro([cuentaId], filtros)),
     supabase.from("transacciones").select("folio").eq("cuenta_id", cuentaId).order("folio", { ascending: false }).limit(1),
     cargarCatalogosMovimiento(supabase),
-    supabase.from("v_saldos_cuentas").select("cuenta_id, nombre, moneda, activa").order("nombre"),
+    supabase.from("v_saldos_cuentas").select("cuenta_id, nombre, moneda, activa, naturaleza").order("nombre"),
   ]);
 
   const cuenta = cuentaR.data as SaldoCuenta | null;
@@ -44,6 +44,9 @@ export default async function CuentaPage(props: PageProps<"/transacciones/[cuent
   const movimientos = (movsR.data ?? []) as Movimiento[];
   const siguienteFolio = Number(folioR.data?.[0]?.folio ?? 0) + 1;
   const puedeEditar = permisos.puedeEditar(cuentaId);
+  // Mismo color de plástico que en la lista de saldos (lugar entre las tarjetas activas)
+  const lugar = ((cuentasR.data ?? []) as { cuenta_id: number; activa: boolean; naturaleza: string | null }[])
+    .filter((c) => c.activa && c.naturaleza === "credito").findIndex((c) => Number(c.cuenta_id) === cuentaId);
   const otras = ((cuentasR.data ?? []) as CuentaCorta[]).filter((c) => c.cuenta_id !== cuentaId && c.activa && permisos.puedeEditar(c.cuenta_id));
 
   return (
@@ -51,22 +54,10 @@ export default async function CuentaPage(props: PageProps<"/transacciones/[cuent
       <Link href="/transacciones" className="mb-3 inline-flex items-center gap-1 text-sm text-muted hover:text-primary">
         <ArrowLeft className="h-4 w-4" aria-hidden /> Todas las cuentas
       </Link>
-      <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="truncate text-2xl font-semibold tracking-tight">{cuenta.nombre}</h1>
-          <p className="mt-1 text-sm text-muted">
-            {[cuenta.banco, cuenta.tipo_cuenta, cuenta.moneda].filter(Boolean).join(" · ")}
-            {!cuenta.activa && " · cuenta inactiva"}
-            {!puedeEditar && " · solo consulta"}
-          </p>
-        </div>
-        <div className="sm:text-right">
-          <p className="text-xs text-muted">Saldo actual</p>
-          <p className={`num text-3xl font-semibold ${Number(cuenta.saldo) < 0 ? "text-danger" : "text-primary"}`}>
-            {dinero(cuenta.saldo, cuenta.moneda)}
-          </p>
-        </div>
-      </header>
+      <div className="mb-6">
+        <EncabezadoCuenta c={cuenta} i={Math.max(0, lugar)}
+          detalle={[cuenta.banco, cuenta.tipo_cuenta, cuenta.moneda].filter(Boolean).join(" · ") + (!cuenta.activa ? " · cuenta inactiva" : "") + (!puedeEditar ? " · solo consulta" : "")} />
+      </div>
 
       {movsR.error ? (
         <p className="card p-6 text-sm text-danger">No se pudieron cargar los movimientos: {movsR.error.message}</p>

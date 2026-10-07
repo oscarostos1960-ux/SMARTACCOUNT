@@ -23,7 +23,7 @@ export default async function ProponerReglasPage() {
     <div className="mx-auto max-w-6xl">
       <header className="mb-6">
         <p className="text-sm font-medium text-muted">Catálogos · Reglas de clasificación</p>
-        <h1 className="text-2xl font-semibold tracking-tight">Proponer reglas desde el historial</h1>
+        <h1 className="text-3xl font-extrabold tracking-tight text-primary">Proponer reglas desde el historial</h1>
         <p className="mt-1 max-w-3xl text-sm text-muted">
           Comercios que en tus movimientos ya guardados siempre se clasificaron igual. Palomea los que quieras convertir en regla:
           al importar, esos comercios se llenarán solos con este &quot;A favor de&quot; y concepto.

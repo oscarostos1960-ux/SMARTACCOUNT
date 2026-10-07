@@ -28,7 +28,7 @@ export default async function ReportePage(props: PageProps<"/reporte">) {
   return (
     <div className="mx-auto max-w-7xl">
       <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Reporte de movimientos</h1>
+        <h1 className="text-3xl font-extrabold tracking-tight text-primary">Reporte de movimientos</h1>
         <p className="mt-1 text-sm text-muted">Busca en una, varias o todas tus cuentas a la vez. Elige las columnas y descárgalo a Excel.</p>
       </header>
       {movsR.error ? (

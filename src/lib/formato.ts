@@ -33,3 +33,9 @@ export function hoyCDMX() {
 export function sinAcentos(texto: string) {
   return texto.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
 }
+
+// "Miércoles, 7 de octubre" (hoy, en la Ciudad de México)
+export function hoyLargo() {
+  const t = new Date(`${hoyCDMX()}T12:00:00Z`).toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}

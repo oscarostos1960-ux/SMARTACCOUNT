@@ -79,7 +79,7 @@ export default async function PagosProgramadosPage(props: PageProps<"/pagos-prog
   return (
     <div className="mx-auto max-w-7xl">
       <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Pagos programados</h1>
+        <h1 className="text-3xl font-extrabold tracking-tight text-primary">Pagos programados</h1>
         <p className="mt-1 text-sm text-muted">Lo que tienes por pagar, cuándo vence y lo que ya quedó pagado.</p>
       </header>
       {vencR.error || pagosR.error ? (

@@ -44,7 +44,7 @@ export default async function ComprobantesPage(props: PageProps<"/reportes/compr
       <Link href="/reportes" className="mb-3 inline-flex items-center gap-1 text-sm text-muted hover:text-primary"><ArrowLeft className="h-4 w-4" aria-hidden /> Reportes</Link>
       <header className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Comprobantes de pago enviados</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-primary">Comprobantes de pago enviados</h1>
           <p className="mt-1 text-sm text-muted">A quién, cuándo y por qué medio se envió cada comprobante de pago.</p>
         </div>
         <a href={`/reportes/comprobantes/exportar${consultaComprobantes(f)}`} className="btn-secondary" data-exportar>

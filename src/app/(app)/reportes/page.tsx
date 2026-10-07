@@ -13,7 +13,7 @@ export default function ReportesPage() {
   return (
     <div className="mx-auto max-w-5xl">
       <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Reportes</h1>
+        <h1 className="text-3xl font-extrabold tracking-tight text-primary">Reportes</h1>
         <p className="mt-1 text-sm text-muted">Elige un reporte.</p>
       </header>
       <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">

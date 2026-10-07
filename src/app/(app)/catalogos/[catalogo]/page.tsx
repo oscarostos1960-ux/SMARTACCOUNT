@@ -56,7 +56,7 @@ export default async function CatalogoPage(props: PageProps<"/catalogos/[catalog
       <header className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-sm font-medium text-muted">Catálogos</p>
-          <h1 className="text-2xl font-semibold tracking-tight">{catalogo.titulo}</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-primary">{catalogo.titulo}</h1>
           <p className="mt-1 text-sm text-muted">{catalogo.descripcion}</p>
         </div>
         {catalogo.accion && perfil.rol === "titular" && <Link href={catalogo.accion.href} className="btn-secondary">{catalogo.accion.texto}</Link>}

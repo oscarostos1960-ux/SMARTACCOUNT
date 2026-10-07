@@ -108,7 +108,7 @@ export default function PagosVista({
           {pestañas.map(({ id, texto, icono: Icono }) => (
             <Link key={id} href={id === "por-vencer" ? "/pagos-programados" : `/pagos-programados?vista=${id}${id === "calendario" ? `&mes=${mes}` : ""}`}
               aria-current={vista === id ? "page" : undefined}
-              className={`flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm ${vista === id ? "bg-primary-soft font-medium text-primary" : "text-muted hover:bg-surface-2 hover:text-text"}`}>
+              className={`flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm ${vista === id ? "bg-accent-soft font-bold text-accent-strong" : "text-muted hover:bg-surface-2 hover:text-text"}`}>
               <Icono className="h-4 w-4" aria-hidden /> {texto}
             </Link>
           ))}
@@ -226,18 +226,21 @@ function PorVencer({ hoy, vencimientos, puedePagar, preparando, conFiltros, rang
   const tonos: Record<string, string> = {
     danger: "text-danger", warn: "text-warn", primary: "text-primary", muted: "text-text",
   };
+  const fondos: Record<string, string> = {
+    danger: "border-danger/20 bg-danger-soft", warn: "border-accent/30 bg-accent-soft",
+  };
 
   return (
     <div className="space-y-6">
-      <section aria-label="Totales" className="card flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <section aria-label="Totales" className="flex flex-col gap-3 rounded-2xl bg-primary p-5 text-white sm:flex-row sm:items-center sm:justify-between">
         <div className="text-sm">
-          <p className="text-muted">{conFiltros ? "Total de lo filtrado" : "Total por pagar"} · {pendientes.length} {pendientes.length === 1 ? "pago pendiente" : "pagos pendientes"}</p>
-          <p className="num text-2xl font-semibold" data-total-filtrado>{totalPorMoneda(pendientes)}</p>
+          <p className="text-white/80">{conFiltros ? "Total de lo filtrado" : "Total por pagar"} · {pendientes.length} {pendientes.length === 1 ? "pago pendiente" : "pagos pendientes"}</p>
+          <p className="num text-3xl font-extrabold" data-total-filtrado>{totalPorMoneda(pendientes)}</p>
         </div>
         <div className="flex flex-col gap-2 sm:items-end">
           {elegidos.length > 0 && (
             <p className="text-sm">
-              <span className="font-medium text-primary">{elegidos.length} seleccionado{elegidos.length > 1 ? "s" : ""}</span>
+              <span className="font-bold text-nav-activo">{elegidos.length} seleccionado{elegidos.length > 1 ? "s" : ""}</span>
               {" · "}<span className="num font-semibold" data-total-seleccion>{totalPorMoneda(elegidos)}</span>
             </p>
           )}
@@ -252,7 +255,7 @@ function PorVencer({ hoy, vencimientos, puedePagar, preparando, conFiltros, rang
               </button>
             )}
             {seleccion.size > 0 && (
-              <button type="button" className="btn-ghost px-3 py-1.5" onClick={() => onSeleccion(new Set())}>Quitar selección</button>
+              <button type="button" className="btn px-3 py-1.5 text-white hover:bg-white/10" onClick={() => onSeleccion(new Set())}>Quitar selección</button>
             )}
           </div>
         </div>
@@ -260,9 +263,9 @@ function PorVencer({ hoy, vencimientos, puedePagar, preparando, conFiltros, rang
 
       <section aria-label="Resumen" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {grupos.map((g) => (
-          <a key={g.id} href={`#${g.id}`} onClick={() => { if (g.id === "despues") setVerDespues(true); }} className="card p-4 hover:shadow-md">
+          <a key={g.id} href={`#${g.id}`} onClick={() => { if (g.id === "despues") setVerDespues(true); }} className={`rounded-2xl border p-4 hover:shadow-md ${fondos[g.tono] ?? "border-border bg-surface"}`}>
             <p className="text-sm text-muted">{g.titulo}</p>
-            <p className={`num mt-1 text-xl font-semibold ${tonos[g.tono]}`}>{totalPorMoneda(g.lista)}</p>
+            <p className={`num mt-1 text-2xl font-extrabold ${tonos[g.tono]}`}>{totalPorMoneda(g.lista)}</p>
             <p className="text-xs text-muted">{g.lista.length} {g.lista.length === 1 ? "pago" : "pagos"}</p>
           </a>
         ))}
