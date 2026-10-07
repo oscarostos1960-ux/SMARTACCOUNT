@@ -192,3 +192,94 @@ export async function actualizarVencimiento(
   refrescar();
   return {};
 }
+
+// ---------- Historial del proveedor: prellenado y opciones para Transacción / Leyendas ----------
+export type RegistroProveedor = {
+  descripcion: string;
+  leyenda1: string;
+  leyenda2: string;
+  leyenda3: string;
+  veces: number;
+  ultima: string;
+};
+export type HistorialProveedor = {
+  ultimo: {
+    fecha: string;
+    cuenta_id: string;
+    concepto_id: string;
+    tipo: "cargo" | "abono";
+    monto: string;
+    descripcion: string;
+    leyenda1: string;
+    leyenda2: string;
+    leyenda3: string;
+    clasificaciones: string[];
+  } | null;
+  registros: RegistroProveedor[];
+};
+
+export async function historialProveedor(proveedorId: number): Promise<HistorialProveedor> {
+  const vacio: HistorialProveedor = { ultimo: null, registros: [] };
+  if (!Number.isInteger(proveedorId) || proveedorId <= 0) return vacio;
+  const supabase = await createClient();
+  // Solo lo capturado a mano o desde pagos programados: lo importado del banco trae textos largos del estado de cuenta
+  const [{ data: movs }, { data: planes }] = await Promise.all([
+    supabase.from("transacciones")
+      .select("id, fecha, folio, cuenta_id, concepto_id, cargo, abono, descripcion, leyenda1, leyenda2, leyenda3")
+      .eq("proveedor_id", proveedorId).is("importacion_id", null)
+      .order("fecha", { ascending: false }).order("folio", { ascending: false }).limit(500),
+    supabase.from("pagos_programados")
+      .select("id, updated_at, cuenta_id, concepto_id, cargo, abono, descripcion, leyenda1, leyenda2, leyenda3")
+      .eq("proveedor_id", proveedorId).order("updated_at", { ascending: false }).limit(50),
+  ]);
+  const limpio = (s: string | null) => (s ?? "").trim();
+  const filas = [
+    ...(movs ?? []).map((m) => ({ ...m, fecha: String(m.fecha), origen: "mov" as const })),
+    ...(planes ?? []).map((p) => ({ ...p, fecha: String(p.updated_at).slice(0, 10), origen: "plan" as const })),
+  ];
+  if (!filas.length) return vacio;
+
+  // Combinaciones usadas antes (sin repetir), las más usadas primero
+  const mapa = new Map<string, RegistroProveedor>();
+  for (const f of filas) {
+    const r = { descripcion: limpio(f.descripcion), leyenda1: limpio(f.leyenda1), leyenda2: limpio(f.leyenda2), leyenda3: limpio(f.leyenda3) };
+    if (!r.descripcion && !r.leyenda1 && !r.leyenda2 && !r.leyenda3) continue;
+    const k = [r.descripcion, r.leyenda1, r.leyenda2, r.leyenda3].join("\u0001").toUpperCase();
+    const prev = mapa.get(k);
+    if (prev) { prev.veces++; if (f.fecha > prev.ultima) prev.ultima = f.fecha; }
+    else mapa.set(k, { ...r, veces: 1, ultima: f.fecha });
+  }
+  const registros = [...mapa.values()]
+    .sort((a, b) => b.veces - a.veces || b.ultima.localeCompare(a.ultima))
+    .slice(0, 200);
+
+  // El último pago: el movimiento más reciente; si no hay, el pago programado más reciente
+  const mov = (movs ?? [])[0];
+  const plan = (planes ?? [])[0];
+  const u = mov ?? plan;
+  let clasificaciones: string[] = [];
+  if (mov) {
+    const { data: cl } = await supabase.from("transaccion_clasificaciones").select("clasificacion_id").eq("transaccion_id", mov.id);
+    clasificaciones = (cl ?? []).map((c) => String(c.clasificacion_id));
+  } else if (plan) {
+    const { data: cl } = await supabase.from("pago_programado_clasificaciones").select("clasificacion_id").eq("pago_id", plan.id);
+    clasificaciones = (cl ?? []).map((c) => String(c.clasificacion_id));
+  }
+  const abono = Number(u.abono) > Number(u.cargo);
+  const importe = Math.abs(Number(u.abono) - Number(u.cargo));
+  return {
+    ultimo: {
+      fecha: mov ? String(mov.fecha) : String(plan.updated_at).slice(0, 10),
+      cuenta_id: u.cuenta_id ? String(u.cuenta_id) : "",
+      concepto_id: u.concepto_id ? String(u.concepto_id) : "",
+      tipo: abono ? "abono" : "cargo",
+      monto: importe ? String(importe) : "",
+      descripcion: limpio(u.descripcion),
+      leyenda1: limpio(u.leyenda1),
+      leyenda2: limpio(u.leyenda2),
+      leyenda3: limpio(u.leyenda3),
+      clasificaciones,
+    },
+    registros,
+  };
+}

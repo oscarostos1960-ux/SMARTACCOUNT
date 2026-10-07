@@ -3,12 +3,33 @@
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { Pause, Play, Trash2 } from "lucide-react";
 import Combobox from "@/components/Combobox";
+import ComboTexto, { type OpcionTexto } from "@/components/ComboTexto";
 import { Campo, Dialogo, type Opcion } from "@/components/movimientos/DialogoMovimiento";
 import type { Clasif } from "@/components/movimientos/TablaMovimientos";
-import { hoyCDMX } from "@/lib/formato";
+import { fecha as fechaTexto, hoyCDMX } from "@/lib/formato";
 import { FRECUENCIAS, describirFrecuencia, type PagoProgramado } from "@/lib/pagos";
 import type { CuentaCorta } from "@/lib/transacciones";
-import { cambiarActivo, eliminarPago, guardarPago, type ResultadoPago } from "./actions";
+import { cambiarActivo, eliminarPago, guardarPago, historialProveedor, type HistorialProveedor, type RegistroProveedor, type ResultadoPago } from "./actions";
+
+const CAMPOS_TEXTO = ["descripcion", "leyenda1", "leyenda2", "leyenda3"] as const;
+type CampoTexto = (typeof CAMPOS_TEXTO)[number];
+
+// Valores distintos de un campo, los más usados primero
+function opcionesDe(registros: RegistroProveedor[], campo: CampoTexto): OpcionTexto[] {
+  const m = new Map<string, { texto: string; veces: number; ultima: string }>();
+  for (const r of registros) {
+    const t = r[campo];
+    if (!t) continue;
+    const k = t.toUpperCase();
+    const o = m.get(k);
+    if (o) { o.veces += r.veces; if (r.ultima > o.ultima) o.ultima = r.ultima; }
+    else m.set(k, { texto: t, veces: r.veces, ultima: r.ultima });
+  }
+  return [...m.values()]
+    .sort((a, b) => b.veces - a.veces || b.ultima.localeCompare(a.ultima))
+    .slice(0, 30)
+    .map((o) => ({ texto: o.texto, detalle: `${o.veces === 1 ? "1 vez" : `${o.veces} veces`} · último ${fechaTexto(o.ultima)}` }));
+}
 
 export default function DialogoPlan({
   pago, cuentas, conceptos, proveedores, clasificaciones, esTitular, onCerrar,
@@ -38,9 +59,45 @@ export default function DialogoPlan({
   const dias = [...(p?.dias_mes ?? [])].sort((a, b) => a - b);
   const e = estado.errores ?? {};
   const soloLectura = !esTitular;
-  const clasifElegidas = new Set((v?.clasificaciones as string[] | undefined) ?? (p?.clasificaciones ?? []).map(String));
+  // Prellenado con el último pago al proveedor (solo al crear) y valores usados antes para los combos
+  const [historial, setHistorial] = useState<HistorialProveedor>({ ultimo: null, registros: [] });
+  const [plantilla, setPlantilla] = useState<HistorialProveedor["ultimo"]>(null);
+  const [version, setVersion] = useState(0);
+  const [textos, setTextos] = useState<Record<CampoTexto, string>>(() => ({
+    descripcion: val("descripcion", p?.descripcion ?? ""),
+    leyenda1: val("leyenda1", p?.leyenda1 ?? ""),
+    leyenda2: val("leyenda2", p?.leyenda2 ?? ""),
+    leyenda3: val("leyenda3", p?.leyenda3 ?? ""),
+  }));
+  const ponerTexto = (k: CampoTexto) => (t: string) => setTextos((x) => ({ ...x, [k]: t }));
+  const opciones = Object.fromEntries(CAMPOS_TEXTO.map((k) => [k, opcionesDe(historial.registros, k)])) as Record<CampoTexto, OpcionTexto[]>;
+
+  async function cargarHistorial(valor: string, prellenar: boolean) {
+    const h = valor ? await historialProveedor(Number(valor)) : { ultimo: null, registros: [] };
+    setHistorial(h);
+    if (prellenar && h.ultimo) {
+      const u = h.ultimo;
+      setPlantilla(u);
+      setTextos({ descripcion: u.descripcion, leyenda1: u.leyenda1, leyenda2: u.leyenda2, leyenda3: u.leyenda3 });
+      setVersion((x) => x + 1);
+    }
+  }
+  const proveedorInicial = val("proveedor_id", p?.proveedor_id ? String(p.proveedor_id) : "");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { if (proveedorInicial) historialProveedor(Number(proveedorInicial)).then(setHistorial).catch(() => {}); }, []);
+
+  // Al elegir un valor de la lista, los demás campos toman lo que se usó junto con él la última vez
+  function alElegir(campo: CampoTexto, texto: string) {
+    const r = historial.registros
+      .filter((x) => x[campo].toUpperCase() === texto.toUpperCase())
+      .sort((a, b) => b.ultima.localeCompare(a.ultima))[0];
+    if (r) setTextos({ descripcion: r.descripcion, leyenda1: r.leyenda1, leyenda2: r.leyenda2, leyenda3: r.leyenda3 });
+  }
+
+  const t = plantilla;
+  const clasifElegidas = new Set((v?.clasificaciones as string[] | undefined) ?? t?.clasificaciones ?? (p?.clasificaciones ?? []).map(String));
   const importe = p ? Math.max(p.cargo, p.abono) : 0;
-  const tipoInicial = val("tipo", p && p.abono > p.cargo ? "abono" : "cargo");
+  const tipoInicial = val("tipo", t?.tipo ?? (p && p.abono > p.cargo ? "abono" : "cargo"));
   const porMes = !["unica", "semanal"].includes(frecuencia);
 
   function alternarActivo() {
@@ -73,14 +130,19 @@ export default function DialogoPlan({
 
           <Campo id="p-proveedor" etiqueta="A favor de (proveedor)" error={e.proveedor_id} className="sm:col-span-6">
             <Combobox id="p-proveedor" nombre="proveedor_id" opciones={proveedores.filter((x) => x.activo || x.valor === String(p?.proveedor_id))}
-              valorInicial={val("proveedor_id", p?.proveedor_id ? String(p.proveedor_id) : "")} placeholder="Buscar proveedor…" />
+              valorInicial={proveedorInicial} placeholder="Buscar proveedor…" onCambio={(x) => void cargarHistorial(x, !p)} />
           </Campo>
+          {t && !p && (
+            <p className="rounded-lg bg-primary-soft px-3 py-2 text-sm text-primary sm:col-span-6" data-prellenado>
+              Datos tomados del último pago a este proveedor ({fechaTexto(t.fecha)}). Revísalos antes de guardar.
+            </p>
+          )}
           <Campo id="p-concepto" etiqueta="Concepto" className="sm:col-span-3">
-            <Combobox id="p-concepto" nombre="concepto_id" opciones={conceptos.filter((c) => c.activo || c.valor === String(p?.concepto_id))}
-              valorInicial={val("concepto_id", p?.concepto_id ? String(p.concepto_id) : "")} placeholder="Buscar concepto…" />
+            <Combobox key={`c${version}`} id="p-concepto" nombre="concepto_id" opciones={conceptos.filter((c) => c.activo || c.valor === String(p?.concepto_id))}
+              valorInicial={val("concepto_id", t?.concepto_id || (p?.concepto_id ? String(p.concepto_id) : ""))} placeholder="Buscar concepto…" />
           </Campo>
           <Campo id="p-cuenta" etiqueta="Cuenta para pagar" className="sm:col-span-3" ayuda="Se propone al registrar el pago; la puedes cambiar.">
-            <select id="p-cuenta" name="cuenta_id" defaultValue={val("cuenta_id", p?.cuenta_id ? String(p.cuenta_id) : "")} className="input">
+            <select key={`a${version}`} id="p-cuenta" name="cuenta_id" defaultValue={val("cuenta_id", t?.cuenta_id && cuentas.some((c) => c.activa && String(c.cuenta_id) === t.cuenta_id) ? t.cuenta_id : p?.cuenta_id ? String(p.cuenta_id) : "")} className="input">
               <option value="">Sin cuenta fija</option>
               {cuentas.filter((c) => c.activa || c.cuenta_id === p?.cuenta_id).map((c) => <option key={c.cuenta_id} value={c.cuenta_id}>{c.nombre} ({c.moneda})</option>)}
             </select>
@@ -88,7 +150,7 @@ export default function DialogoPlan({
 
           <fieldset className="sm:col-span-3">
             <legend className="label">Tipo</legend>
-            <div className="grid grid-cols-2 gap-1 rounded-lg border border-border p-1">
+            <div key={`t${version}`} className="grid grid-cols-2 gap-1 rounded-lg border border-border p-1">
               {(["cargo", "abono"] as const).map((t) => (
                 <label key={t} className="cursor-pointer">
                   <input type="radio" name="tipo" value={t} defaultChecked={tipoInicial === t} className="peer sr-only" />
@@ -100,7 +162,7 @@ export default function DialogoPlan({
             </div>
           </fieldset>
           <Campo id="p-monto" etiqueta="Importe" error={e.monto} className="sm:col-span-3" ayuda="Déjalo en 0 si cambia cada vez.">
-            <input id="p-monto" name="monto" type="text" inputMode="decimal" defaultValue={val("monto", p ? String(importe) : "")} className="input num text-right" placeholder="0.00" />
+            <input key={`m${version}`} id="p-monto" name="monto" type="text" inputMode="decimal" defaultValue={val("monto", p ? String(importe) : t?.monto ?? "")} className="input num text-right" placeholder="0.00" />
           </Campo>
 
           <Campo id="p-frecuencia" etiqueta="Se paga" requerido error={e.frecuencia} className="sm:col-span-2">
@@ -132,24 +194,24 @@ export default function DialogoPlan({
           )}
 
           <Campo id="p-desc" etiqueta="Transacción" className="sm:col-span-4">
-            <input id="p-desc" name="descripcion" type="text" defaultValue={val("descripcion", p?.descripcion ?? "")} className="input" maxLength={250} />
+            <ComboTexto id="p-desc" nombre="descripcion" valor={textos.descripcion} onCambio={ponerTexto("descripcion")} onElegir={(x) => alElegir("descripcion", x)} opciones={opciones.descripcion} maxLength={250} />
           </Campo>
           <Campo id="p-ref" etiqueta="Cheque / referencia" className="sm:col-span-2">
             <input id="p-ref" name="referencia" type="text" defaultValue={val("referencia", p?.referencia ?? "")} className="input" maxLength={100} />
           </Campo>
           <Campo id="p-l1" etiqueta="Leyenda 1" className="sm:col-span-6">
-            <input id="p-l1" name="leyenda1" type="text" defaultValue={val("leyenda1", p?.leyenda1 ?? "")} className="input" maxLength={255} />
+            <ComboTexto id="p-l1" nombre="leyenda1" valor={textos.leyenda1} onCambio={ponerTexto("leyenda1")} onElegir={(x) => alElegir("leyenda1", x)} opciones={opciones.leyenda1} maxLength={255} />
           </Campo>
           <Campo id="p-l2" etiqueta="Leyenda 2" className="sm:col-span-6">
-            <input id="p-l2" name="leyenda2" type="text" defaultValue={val("leyenda2", p?.leyenda2 ?? "")} className="input" maxLength={255} />
+            <ComboTexto id="p-l2" nombre="leyenda2" valor={textos.leyenda2} onCambio={ponerTexto("leyenda2")} onElegir={(x) => alElegir("leyenda2", x)} opciones={opciones.leyenda2} maxLength={255} />
           </Campo>
           <Campo id="p-l3" etiqueta="Leyenda 3" className="sm:col-span-6">
-            <input id="p-l3" name="leyenda3" type="text" defaultValue={val("leyenda3", p?.leyenda3 ?? "")} className="input" maxLength={500} />
+            <ComboTexto id="p-l3" nombre="leyenda3" valor={textos.leyenda3} onCambio={ponerTexto("leyenda3")} onElegir={(x) => alElegir("leyenda3", x)} opciones={opciones.leyenda3} maxLength={500} />
           </Campo>
           {clasificaciones.length > 0 && (
             <fieldset className="sm:col-span-6">
               <legend className="label">Clasificaciones</legend>
-              <div className="flex flex-wrap gap-2">
+              <div key={`k${version}`} className="flex flex-wrap gap-2">
                 {clasificaciones.filter((c) => c.activo || clasifElegidas.has(String(c.id))).map((c) => (
                   <label key={c.id} className="cursor-pointer">
                     <input type="checkbox" name="clasificaciones" value={c.id} defaultChecked={clasifElegidas.has(String(c.id))} className="peer sr-only" />
