@@ -27,7 +27,11 @@ const fechaHora = (iso: string) => new Intl.DateTimeFormat("es-MX", {
 
 // Sección "Avisos al proveedor" dentro de un movimiento ya guardado: reenviar y ver historial.
 // `revision` cambia cada vez que se adjuntan documentos: si había avisos en espera, salen en ese momento.
-export default function AvisosMovimiento({ movimientoId, puedeEditar, revision = 0 }: { movimientoId: number; puedeEditar: boolean; revision?: number }) {
+export default function AvisosMovimiento({ movimientoId, puedeEditar, revision = 0, hayDocumentos = false }: {
+  movimientoId: number; puedeEditar: boolean; revision?: number;
+  /** El movimiento ya tiene comprobante: si un aviso quedó en espera, se ofrece enviarlo */
+  hayDocumentos?: boolean;
+}) {
   const [historial, setHistorial] = useState<Aviso[] | null>(null);
   const [espera, setEspera] = useState<Canal[]>([]);
   const [resultados, setResultados] = useState<ResultadoAviso[]>();
@@ -88,7 +92,15 @@ export default function AvisosMovimiento({ movimientoId, puedeEditar, revision =
       {espera.length > 0 && !resultados && (
         <p className="mb-2 flex items-start gap-2 rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn" data-en-espera>
           <Clock className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-          <span><strong>{espera.map((c) => NOMBRE[c]).join(" y ")} en espera:</strong> se enviará solo en cuanto adjuntes el comprobante de pago.</span>
+          <span className="flex-1">
+            <strong>{espera.map((c) => NOMBRE[c]).join(" y ")} en espera:</strong>{" "}
+            {hayDocumentos ? "el comprobante ya está adjunto; envíalo ahora." : "se enviará solo en cuanto adjuntes el comprobante de pago."}
+          </span>
+          {hayDocumentos && puedeEditar && (
+            <button type="button" className="btn-primary shrink-0 px-3 py-1" disabled={enviando} onClick={() => enviar(espera)} data-enviar-espera>
+              <Send className="h-4 w-4" aria-hidden /> Enviar ahora
+            </button>
+          )}
         </p>
       )}
       {resultados && <div className="mb-2"><ListaResultados resultados={resultados} /></div>}

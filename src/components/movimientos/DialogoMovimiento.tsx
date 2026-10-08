@@ -281,7 +281,7 @@ export function DialogoMovimiento({
           {m ? (
             <>
               <Documentos cuentaId={cuenta.cuenta_id} movimientoId={m.id} puedeEditar={puedeEditar} onSubidos={() => setRevisionAvisos((x) => x + 1)} />
-              {m.proveedor_id && <AvisosMovimiento movimientoId={m.id} puedeEditar={puedeEditar} revision={revisionAvisos} />}
+              {m.proveedor_id && <AvisosMovimiento movimientoId={m.id} puedeEditar={puedeEditar} revision={revisionAvisos} hayDocumentos={m.documentos > 0 || revisionAvisos > 0} />}
             </>
           ) : (
             <div

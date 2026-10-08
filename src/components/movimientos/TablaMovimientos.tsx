@@ -10,6 +10,7 @@ import { dinero, fecha as fmtFecha } from "@/lib/formato";
 import { COLUMNAS, type ClaveColumna, type Movimiento, type Totales } from "@/lib/transacciones";
 import { useColumnas } from "./columnas";
 import { subirArchivos } from "./Documentos";
+import { enviarAvisosEnEspera } from "@/app/(app)/transacciones/actions";
 
 export type Clasif = { id: number; nombre: string; color: string; activo: boolean };
 
@@ -299,10 +300,20 @@ function useSoltarArchivos(puedeAdjuntar?: (m: Movimiento) => boolean) {
         setSubiendo(m.id);
         setAviso({ tipo: "subiendo", texto: `Adjuntando ${archivos.length} archivo(s) al folio ${m.folio}…` });
         const errores = await subirArchivos(m.cuenta_id, m.id, archivos);
+        // Si el aviso al proveedor esperaba el comprobante, sale ahora
+        let extra = "";
+        if (errores.length < archivos.length && (m.aviso_whatsapp === "espera" || m.aviso_correo === "espera")) {
+          setAviso({ tipo: "subiendo", texto: `Enviando el aviso del folio ${m.folio} al proveedor…` });
+          const r = await enviarAvisosEnEspera(m.id).catch(() => ({ resultados: undefined, error: "No se pudo enviar el aviso." }));
+          const res = r.resultados ?? [];
+          extra = res.length
+            ? " " + res.map((x) => `${x.canal === "whatsapp" ? "WhatsApp" : "Correo"}: ${x.ok ? "enviado" : x.mensaje}`).join(" · ")
+            : r.error ? ` ${r.error}` : "";
+        }
         setSubiendo(null);
         setAviso(errores.length
-          ? { tipo: "error", texto: errores.join(" ") }
-          : { tipo: "ok", texto: `Listo: ${archivos.length === 1 ? `"${archivos[0].name}" quedó adjunto` : `${archivos.length} archivos quedaron adjuntos`} al folio ${m.folio}.` });
+          ? { tipo: "error", texto: errores.join(" ") + extra }
+          : { tipo: "ok", texto: `Listo: ${archivos.length === 1 ? `"${archivos[0].name}" quedó adjunto` : `${archivos.length} archivos quedaron adjuntos`} al folio ${m.folio}.${extra}` });
         router.refresh();
       },
     };
