@@ -312,6 +312,7 @@ export function corregirCargoYAbono(datos: EstadoIA): EstadoIA {
   const tarjeta = datos.tipo_producto === "tarjeta_credito";
   let previo = datos.saldo_inicial;
   let cambio = false;
+  const volteados: string[] = [];
   const movimientos = datos.movimientos.map((m) => {
     let r = m;
     if (m.cargo > 0 && m.abono > 0) {
@@ -325,12 +326,28 @@ export function corregirCargoYAbono(datos: EstadoIA): EstadoIA {
         else if (Math.abs(conCargo - m.saldo) < 0.015) elegido = comoCargo;
       }
       r = elegido ?? (PARECE_ABONO.test(normal(m.descripcion)) ? comoAbono : comoCargo);
+    } else if (m.saldo !== null && previo !== null && (m.cargo > 0) !== (m.abono > 0)) {
+      // Un solo importe pero del lado equivocado: el saldo del banco dice si sube o baja
+      // (p. ej. un "TRASPASO ENTRE CUENTAS" recibido que se leyó como cargo).
+      const importe = m.cargo || m.abono;
+      const sube = tarjeta ? m.cargo > 0 : m.abono > 0;
+      const comoViene = redondea(previo + (sube ? importe : -importe));
+      const alReves = redondea(previo + (sube ? -importe : importe));
+      if (Math.abs(comoViene - m.saldo) >= 0.015 && Math.abs(alReves - m.saldo) < 0.015) {
+        cambio = true;
+        r = { ...m, cargo: m.abono, abono: m.cargo };
+        volteados.push(`${m.descripcion} (${importe.toFixed(2)})`);
+      }
     }
     if (r.saldo !== null) previo = r.saldo;
     else if (previo !== null) previo = redondea(previo + (tarjeta ? r.cargo - r.abono : r.abono - r.cargo));
     return r;
   });
-  return cambio ? { ...datos, movimientos } : datos;
+  if (!cambio) return datos;
+  const nota = volteados.length
+    ? `AJUSTE AUTOMÁTICO: según el saldo del banco, ${volteados.join(", ")} ${volteados.length === 1 ? "era" : "eran"} del lado contrario (cargo/abono) y se corrigió.`
+    : null;
+  return { ...datos, movimientos, notas: nota ? [datos.notas, nota].filter(Boolean).join(" ") : datos.notas };
 }
 
 // ---------- Fecha de las mensualidades agregadas ----------
