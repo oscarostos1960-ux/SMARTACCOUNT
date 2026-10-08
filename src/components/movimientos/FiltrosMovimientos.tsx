@@ -19,9 +19,11 @@ export default function FiltrosMovimientos({
   cuentas?: CuentaCorta[];        // solo en el reporte de varias cuentas
 }) {
   const hayFiltros = !!(filtros.desde || filtros.hasta || filtros.texto || filtros.concepto || filtros.proveedor
-    || filtros.clasificacion || filtros.tipo || filtros.cuentas?.length);
+    || filtros.clasificaciones?.length || filtros.tipo || filtros.cuentas?.length);
   const [elegidas, setElegidas] = useState<number[]>(filtros.cuentas ?? []);
   const [verInactivas, setVerInactivas] = useState(false);
+  const [clasifElegidas, setClasifElegidas] = useState<number[]>(filtros.clasificaciones ?? []);
+  const [modo, setModo] = useState<"o" | "y">(filtros.modoClasif === "y" ? "y" : "o");
 
   return (
     <form method="get" action={accion} className="card mb-4 p-4" role="search" aria-label="Filtrar movimientos">
@@ -88,7 +90,7 @@ export default function FiltrosMovimientos({
           {hayFiltros && <Link href={accion} className="btn-secondary">Limpiar</Link>}
         </div>
       </div>
-      <details className="mt-3" open={!!(filtros.concepto || filtros.proveedor || filtros.clasificacion || filtros.tipo)}>
+      <details className="mt-3" open={!!(filtros.concepto || filtros.proveedor || filtros.clasificaciones?.length || filtros.tipo)}>
         <summary className="cursor-pointer text-sm font-medium text-primary">Más filtros</summary>
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div>
@@ -107,13 +109,45 @@ export default function FiltrosMovimientos({
             <label htmlFor="f-proveedor" className="label">A favor de</label>
             <Combobox id="f-proveedor" nombre="proveedor" opciones={proveedores} valorInicial={filtros.proveedor ? String(filtros.proveedor) : ""} placeholder="Todos" />
           </div>
-          <div>
-            <label htmlFor="f-clasif" className="label">Clasificación</label>
-            <select id="f-clasif" name="clasificacion" defaultValue={filtros.clasificacion ?? ""} className="input">
-              <option value="">Todas</option>
-              {clasificaciones.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-            </select>
-          </div>
+          <fieldset className="sm:col-span-2 lg:col-span-4" data-filtro-clasif>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <legend className="label mb-0">Clasificaciones {clasifElegidas.length > 0 && <span className="badge bg-accent-soft text-accent-strong">{clasifElegidas.length}</span>}</legend>
+              <div className="flex flex-wrap items-center gap-3 text-sm">
+                <div className="inline-flex rounded-lg border border-border p-0.5" role="group" aria-label="Cómo combinar las clasificaciones">
+                  <button type="button" aria-pressed={modo !== "y"} onClick={() => setModo("o")} data-modo="o"
+                    className={`rounded-md px-3 py-1 ${modo !== "y" ? "bg-primary font-semibold text-white" : "text-muted hover:text-text"}`}>
+                    O · cualquiera
+                  </button>
+                  <button type="button" aria-pressed={modo === "y"} onClick={() => setModo("y")} data-modo="y"
+                    className={`rounded-md px-3 py-1 ${modo === "y" ? "bg-primary font-semibold text-white" : "text-muted hover:text-text"}`}>
+                    Y · todas
+                  </button>
+                </div>
+                {clasifElegidas.length > 0 && <button type="button" className="font-medium text-primary hover:underline" onClick={() => setClasifElegidas([])}>Quitar</button>}
+              </div>
+            </div>
+            <input type="hidden" name="clasificaciones" value={clasifElegidas.join(",")} />
+            {modo === "y" && <input type="hidden" name="modoClasif" value="y" />}
+            <div className="flex flex-wrap gap-2">
+              {clasificaciones.filter((c) => c.activo || clasifElegidas.includes(c.id)).map((c) => {
+                const activa = clasifElegidas.includes(c.id);
+                return (
+                  <button key={c.id} type="button" aria-pressed={activa} data-clasif={c.id}
+                    onClick={() => setClasifElegidas((e) => (activa ? e.filter((x) => x !== c.id) : [...e, c.id]))}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm ${activa ? "border-primary bg-primary-soft font-semibold text-primary" : "border-border hover:bg-surface-2"}`}>
+                    <span className="h-2 w-2 rounded-full" style={{ background: c.color }} aria-hidden />{c.nombre}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-2 text-xs text-muted">
+              {clasifElegidas.length < 2
+                ? "Elige una o varias. Con «O» salen los movimientos que tengan cualquiera de ellas; con «Y», solo los que tengan todas."
+                : modo === "y"
+                  ? "Solo movimientos que tengan TODAS las clasificaciones elegidas."
+                  : "Movimientos que tengan CUALQUIERA de las clasificaciones elegidas."}
+            </p>
+          </fieldset>
         </div>
       </details>
     </form>

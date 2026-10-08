@@ -38,7 +38,7 @@ export default function MovimientosVista({
   const [version, setVersion] = useState(0);
   const base = `/transacciones/${cuenta.cuenta_id}`;
   const { pagina, ...sinPagina } = filtros;
-  const hayFiltros = !!(filtros.desde || filtros.hasta || filtros.texto || filtros.concepto || filtros.proveedor || filtros.clasificacion || filtros.tipo);
+  const hayFiltros = !!(filtros.desde || filtros.hasta || filtros.texto || filtros.concepto || filtros.proveedor || filtros.clasificaciones?.length || filtros.tipo);
 
   function abrir(m: Movimiento | "nuevo" | "transferencia") {
     setVersion((v) => v + 1);

@@ -56,7 +56,8 @@ export type Filtros = {
   texto?: string;
   concepto?: number;
   proveedor?: number;
-  clasificacion?: number;
+  clasificaciones?: number[];  // una o varias
+  modoClasif?: "y";             // "y" = que tenga todas; sin valor = cualquiera de ellas ("o")
   tipo?: "cargos" | "abonos";
   pagina: number;
 };
@@ -107,6 +108,10 @@ const entero = (s: unknown) => {
 export function leerFiltros(sp: Record<string, string | string[] | undefined>): Filtros {
   const uno = (k: string) => (Array.isArray(sp[k]) ? sp[k]![0] : sp[k]) as string | undefined;
   const tipo = uno("tipo");
+  const lista = (t: string | undefined) => {
+    const xs = [...new Set((t ?? "").split(",").map((x) => entero(x)).filter((x): x is number => !!x))];
+    return xs.length ? xs : undefined;
+  };
   const cuentas = (uno("cuentas") ?? "").split(",").map((x) => entero(x)).filter((x): x is number => !!x);
   return {
     cuentas: cuentas.length ? cuentas : undefined,
@@ -115,7 +120,8 @@ export function leerFiltros(sp: Record<string, string | string[] | undefined>): 
     texto: uno("texto")?.trim().slice(0, 100) || undefined,
     concepto: entero(uno("concepto")),
     proveedor: entero(uno("proveedor")),
-    clasificacion: entero(uno("clasificacion")),
+    clasificaciones: lista(uno("clasificaciones") ?? uno("clasificacion")),
+    modoClasif: uno("modoClasif") === "y" ? "y" : undefined,
     tipo: tipo === "cargos" || tipo === "abonos" ? tipo : undefined,
     pagina: entero(uno("pagina")) ?? 1,
   };
@@ -130,7 +136,8 @@ export function parametrosFiltro(cuentas: number[] | null, f: Filtros) {
     p_texto: f.texto ?? null,
     p_concepto: f.concepto ?? null,
     p_proveedor: f.proveedor ?? null,
-    p_clasificacion: f.clasificacion ?? null,
+    p_clasificaciones: f.clasificaciones?.length ? f.clasificaciones : null,
+    p_clasif_todas: f.modoClasif === "y",
     p_tipo: f.tipo ?? null,
   };
 }

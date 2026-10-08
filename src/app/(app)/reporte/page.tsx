@@ -17,8 +17,8 @@ export default async function ReportePage(props: PageProps<"/reporte">) {
   const cuentas = filtros.cuentas ?? null;
 
   const [movsR, totR, catalogos, cuentasR] = await Promise.all([
-    supabase.rpc("buscar_movimientos", parametrosBusqueda(cuentas, filtros, "fecha")),
-    supabase.rpc("totales_movimientos", parametrosFiltro(cuentas, filtros)),
+    supabase.rpc("buscar_movimientos_v2", parametrosBusqueda(cuentas, filtros, "fecha")),
+    supabase.rpc("totales_movimientos_v2", parametrosFiltro(cuentas, filtros)),
     cargarCatalogosMovimiento(supabase),
     supabase.from("v_saldos_cuentas").select("cuenta_id, nombre, moneda, activa").order("nombre"),
   ]);

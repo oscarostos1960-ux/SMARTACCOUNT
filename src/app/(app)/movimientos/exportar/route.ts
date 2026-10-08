@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   const filas: Movimiento[] = [];
   const LOTE = 5000;
   for (let offset = 0; offset < 200000; offset += LOTE) {
-    const { data, error } = await supabase.rpc("buscar_movimientos", parametrosBusqueda(filtros.cuentas ?? null, filtros, orden, LOTE, offset));
+    const { data, error } = await supabase.rpc("buscar_movimientos_v2", parametrosBusqueda(filtros.cuentas ?? null, filtros, orden, LOTE, offset));
     if (error) return new Response(`No se pudo exportar: ${error.message}`, { status: 500 });
     filas.push(...((data ?? []) as Movimiento[]));
     if (!data || data.length < LOTE) break;

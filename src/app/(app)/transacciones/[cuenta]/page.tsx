@@ -32,8 +32,8 @@ export default async function CuentaPage(props: PageProps<"/transacciones/[cuent
 
   const [cuentaR, movsR, totR, folioR, catalogos, cuentasR] = await Promise.all([
     supabase.from("v_saldos_cuentas").select("*").eq("cuenta_id", cuentaId).maybeSingle(),
-    supabase.rpc("buscar_movimientos", parametrosBusqueda([cuentaId], filtros, "folio")),
-    supabase.rpc("totales_movimientos", parametrosFiltro([cuentaId], filtros)),
+    supabase.rpc("buscar_movimientos_v2", parametrosBusqueda([cuentaId], filtros, "folio")),
+    supabase.rpc("totales_movimientos_v2", parametrosFiltro([cuentaId], filtros)),
     supabase.from("transacciones").select("folio").eq("cuenta_id", cuentaId).order("folio", { ascending: false }).limit(1),
     cargarCatalogosMovimiento(supabase),
     supabase.from("v_saldos_cuentas").select("cuenta_id, nombre, moneda, activa, naturaleza").order("nombre"),
