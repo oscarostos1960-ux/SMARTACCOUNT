@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { obtenerPerfil } from "@/lib/auth";
+import { esAdmin, obtenerPerfil } from "@/lib/auth";
 import { CATALOGOS, obtenerCatalogo } from "@/lib/catalogos";
 import CatalogoVista, { type Opcion, type Registro } from "@/components/CatalogoVista";
 
@@ -21,6 +21,9 @@ export default async function CatalogoPage(props: PageProps<"/catalogos/[catalog
   if (!catalogo) notFound();
 
   const perfil = await obtenerPerfil();
+  // Monedas y tipos de cuenta son comunes a todos los espacios: solo el administrador los cambia
+  const comun = catalogo.tabla === "monedas" || catalogo.tabla === "tipos_cuenta";
+  const puedeEditar = perfil.rol === "titular" && (!comun || (await esAdmin()));
   const supabase = await createClient();
 
   const { data: registros, error } = await supabase
@@ -58,6 +61,7 @@ export default async function CatalogoPage(props: PageProps<"/catalogos/[catalog
           <p className="text-sm font-medium text-muted">Catálogos</p>
           <h1 className="text-3xl font-extrabold tracking-tight text-primary">{catalogo.titulo}</h1>
           <p className="mt-1 text-sm text-muted">{catalogo.descripcion}</p>
+          {comun && !puedeEditar && perfil.rol === "titular" && <p className="mt-1 text-xs text-muted" data-catalogo-comun>Este catálogo es común para todos; si necesitas otra opción, pídela al administrador.</p>}
         </div>
         {catalogo.accion && perfil.rol === "titular" && <Link href={catalogo.accion.href} className="btn-secondary">{catalogo.accion.texto}</Link>}
       </header>
@@ -68,7 +72,7 @@ export default async function CatalogoPage(props: PageProps<"/catalogos/[catalog
           clave={catalogo.clave}
           registros={(registros ?? []) as Registro[]}
           referencias={referencias}
-          puedeEditar={perfil.rol === "titular"}
+          puedeEditar={puedeEditar}
           usos={usos}
         />
       )}

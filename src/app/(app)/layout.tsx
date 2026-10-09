@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { obtenerPerfil, obtenerPermisos } from "@/lib/auth";
+import { obtenerEspacio, obtenerPerfil, obtenerPermisos } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import Navegacion from "@/components/Navegacion";
 import BarraMovil, { type CuentaRapida } from "@/components/BarraMovil";
@@ -21,7 +21,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   }
 
   // Cuentas activas donde puede registrar movimientos (para el botón "Registrar" del celular)
-  const permisos = await obtenerPermisos();
+  const [permisos, espacio] = await Promise.all([obtenerPermisos(), obtenerEspacio()]);
   const supabase = await createClient();
   const { data } = await supabase.from("v_saldos_cuentas").select("cuenta_id, nombre, moneda, saldo, activa").eq("activa", true).order("nombre");
   const cuentasRapidas: CuentaRapida[] = (data ?? [])
@@ -30,7 +30,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
 
   return (
     <div className="min-h-screen">
-      <Navegacion nombre={perfil.nombre} rol={perfil.rol} />
+      <Navegacion nombre={perfil.nombre} rol={perfil.rol} espacio={espacio.principal ? null : espacio.nombre} />
       <main className="px-4 pb-28 pt-6 sm:px-6 lg:ml-64 lg:px-10 lg:py-10">{children}</main>
       <BarraMovil cuentas={cuentasRapidas} esTitular={permisos.esTitular} />
     </div>

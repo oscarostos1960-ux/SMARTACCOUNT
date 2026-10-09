@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { obtenerPermisos } from "@/lib/auth";
+import { obtenerEspacio, obtenerPermisos } from "@/lib/auth";
+import { leerSecreto } from "@/lib/secretos";
 import { leerEstadoConIA } from "./ia";
 import { completarCargosDelResumen, corregirCargoYAbono, cuadrar, fecharMensualidades, quitarCargosDelResumenRepetidos, quitarMensualidadesSobrantes } from "./analisis";
 import type { EstadoIA, ResumenLectura } from "./esquema";
@@ -14,6 +15,14 @@ export async function leerArchivo(
 ): Promise<{ error: string; id?: number } | { id: number; datos: EstadoIA; cuentaId: number | null }> {
   if (!permisos.algunaEditable) return { error: "No tienes permiso para importar movimientos." };
   if (!ruta.startsWith(`${permisos.perfil.id}/`) || (tipo !== "pdf" && tipo !== "xml")) return { error: "Archivo no válido." };
+
+  // Espacios de clientes: leen con su propia clave de IA (la de Oscar nunca se usa para ellos)
+  const espacio = await obtenerEspacio();
+  let clavePropia: string | null = null;
+  if (!espacio.principal) {
+    clavePropia = await leerSecreto(espacio.id, "ia_clave").catch(() => null);
+    if (!clavePropia) return { error: "Para leer estados de cuenta primero agrega tu clave de IA en Mi espacio." };
+  }
 
   const { data: imp, error: e1 } = await supabase.from("importaciones").insert({
     archivo_nombre: nombre.slice(0, 200), archivo_ruta: ruta, archivo_tipo: tipo, archivo_huella: huella, estado: "leyendo",
@@ -30,7 +39,7 @@ export async function leerArchivo(
   let datos: EstadoIA;
   let modelo: string;
   try {
-    ({ datos, modelo } = await leerEstadoConIA(Buffer.from(await blob.arrayBuffer()), tipo, nombre));
+    ({ datos, modelo } = await leerEstadoConIA(Buffer.from(await blob.arrayBuffer()), tipo, nombre, clavePropia));
     datos = fecharMensualidades(quitarMensualidadesSobrantes(quitarCargosDelResumenRepetidos(completarCargosDelResumen(corregirCargoYAbono(datos)))));
   } catch (e) {
     const msg = e instanceof Error ? e.message : "error desconocido";

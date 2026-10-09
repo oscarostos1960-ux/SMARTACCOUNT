@@ -6,6 +6,7 @@ import { ImageResponse } from "next/og";
 import nodemailer from "nodemailer";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { dinero, fecha } from "@/lib/formato";
+import { leerSecreto } from "@/lib/secretos";
 
 // Avisos de pago al proveedor: imagen con los datos del pago + comprobante,
 // por WhatsApp (plantillas aprobadas de 1msg.io) y por correo (SMTP).
@@ -26,6 +27,13 @@ type DatosAviso = {
   importe: number;
   moneda: string;
   documentos: { nombre: string; ruta: string; tipo: string | null }[];
+  espacio: EspacioAviso;
+};
+
+// Quién firma y desde qué correo sale el aviso (cada cliente con espacio propio usa su nombre y su correo)
+export type EspacioAviso = {
+  id: number; nombre: string; principal: boolean; titularCorreo: string | null;
+  correoRemitente: string | null; correoNombre: string | null; smtpHost: string | null; smtpPuerto: number | null; smtpActivo: boolean;
 };
 
 const CADUCIDAD_LIGAS = 60 * 60 * 24 * 7;   // 7 días: tiempo para que WhatsApp descargue los archivos
@@ -65,6 +73,7 @@ async function cargarDatos(supabase: SupabaseClient, movimientoId: number): Prom
     supabase.from("v_saldos_cuentas").select("moneda").eq("cuenta_id", t.cuenta_id).maybeSingle(),
     supabase.from("documentos").select("nombre, ruta, tipo").eq("transaccion_id", movimientoId).order("id"),
   ]);
+  const espacio = await cargarEspacio(supabase, Number(t.cuenta_id));
   type Prov = { nombre: string; apellido_paterno: string | null; apellido_materno: string | null; razon_social: string | null; celular: string | null; correo: string | null };
   const p = provR.data as Prov | null;
   return {
@@ -78,8 +87,25 @@ async function cargarDatos(supabase: SupabaseClient, movimientoId: number): Prom
     importe: Number(t.cargo) > 0 ? Number(t.cargo) : Number(t.abono),
     moneda: (cuentaR.data as { moneda: string } | null)?.moneda ?? "MXN",
     documentos: (docsR.data ?? []) as DatosAviso["documentos"],
+    espacio,
   };
 }
+
+async function cargarEspacio(supabase: SupabaseClient, cuentaId: number): Promise<EspacioAviso> {
+  const { data: c } = await supabase.from("cuentas").select("espacio_id").eq("id", cuentaId).maybeSingle();
+  const { data: e } = c ? await supabase.from("espacios")
+    .select("id, nombre, principal, titular_id, correo_remitente, correo_nombre, smtp_host, smtp_puerto, smtp_activo")
+    .eq("id", c.espacio_id).maybeSingle() : { data: null };
+  if (!e) return { id: 0, nombre: "", principal: true, titularCorreo: null, correoRemitente: null, correoNombre: null, smtpHost: null, smtpPuerto: null, smtpActivo: false };
+  const { data: tit } = e.titular_id ? await supabase.from("perfiles").select("correo").eq("id", e.titular_id).maybeSingle() : { data: null };
+  return {
+    id: Number(e.id), nombre: String(e.nombre ?? ""), principal: !!e.principal, titularCorreo: (tit?.correo as string | null) ?? null,
+    correoRemitente: e.correo_remitente, correoNombre: e.correo_nombre, smtpHost: e.smtp_host, smtpPuerto: e.smtp_puerto, smtpActivo: !!e.smtp_activo,
+  };
+}
+
+// Nombre con el que firma el aviso: en el espacio principal la imagen ya trae la firma de Oscar
+const firma = (e: EspacioAviso) => (e.principal ? null : (e.correoNombre || e.nombre || "").trim() || null);
 
 // ---------- Imagen del aviso (misma presentación que el sistema anterior) ----------
 async function generarImagen(d: DatosAviso): Promise<Buffer> {
@@ -97,6 +123,11 @@ async function generarImagen(d: DatosAviso): Promise<Buffer> {
       texto(fecha(d.fecha), 438, 448, 420),
       texto(d.concepto.toUpperCase(), 285, 512, 600),
       texto(dinero(d.importe, d.moneda) + (d.moneda !== "MXN" ? ` ${d.moneda}` : ""), 423, 574, 420),
+      // Clientes con espacio propio: se tapa la firma original y se pone su nombre
+      ...(firma(d.espacio) ? [
+        h("div", { style: { position: "absolute", left: 92, top: 862, width: 440, height: 66, display: "flex", background: "linear-gradient(180deg, #153765 0%, #183a68 100%)" } }),
+        texto(firma(d.espacio)!, 104, 916, 420, 46),
+      ] : []),
     ),
     { width: 1000, height: 1476, fonts: [{ name: "Geist", data: negrita.buffer.slice(negrita.byteOffset, negrita.byteOffset + negrita.byteLength) as ArrayBuffer, weight: 700, style: "normal" }] },
   );
@@ -164,26 +195,46 @@ async function enviarWhatsApp(supabase: SupabaseClient, d: DatosAviso, imagenUrl
 }
 
 // ---------- Correo (SMTP) ----------
+// 1) El espacio configuró su propio correo → sale de ahí, con su nombre.
+// 2) Espacio principal sin correo propio → correo general (variables de Vercel), como siempre.
+// 3) Cliente sin correo propio → correo general, pero con su nombre y las respuestas le llegan a él (sin copia a Oscar).
+type Salida = { host: string; puerto: number; usuario: string; contrasena: string; from: string; replyTo?: string; cc?: string };
+
+export async function salidaCorreo(e: EspacioAviso): Promise<Salida | null> {
+  if (e.smtpActivo && e.smtpHost && e.correoRemitente) {
+    const contrasena = await leerSecreto(e.id, "smtp_contrasena").catch(() => null);
+    if (contrasena) {
+      return {
+        host: e.smtpHost, puerto: e.smtpPuerto || 465, usuario: e.correoRemitente, contrasena,
+        from: `"${(e.correoNombre || e.nombre).replace(/"/g, "")}" <${e.correoRemitente}>`,
+      };
+    }
+  }
+  if (!correoConfigurado()) return null;
+  const general = { host: process.env.SMTP_HOST!, puerto: Number(process.env.SMTP_PORT || 465), usuario: process.env.SMTP_USER!, contrasena: process.env.SMTP_PASS! };
+  if (e.principal) return { ...general, from: process.env.CORREO_REMITENTE || process.env.SMTP_USER!, cc: process.env.AVISO_COPIA || undefined };
+  const nombre = (e.correoNombre || e.nombre || "Smart Account").replace(/"/g, "");
+  return { ...general, from: `"${nombre}" <${process.env.SMTP_USER}>`, replyTo: e.correoRemitente || e.titularCorreo || undefined };
+}
+
+export function transporteCorreo(s: Salida) {
+  return nodemailer.createTransport({ host: s.host, port: s.puerto, secure: s.puerto === 465, auth: { user: s.usuario, pass: s.contrasena } });
+}
+
 async function enviarCorreo(supabase: SupabaseClient, d: DatosAviso, png: Buffer): Promise<ResultadoAviso> {
-  if (!correoConfigurado()) return { canal: "correo", ok: false, destino: null, mensaje: "El correo de salida no está configurado." };
+  const salida = await salidaCorreo(d.espacio);
+  if (!salida) return { canal: "correo", ok: false, destino: null, mensaje: "El correo de salida no está configurado." };
   if (!correoValido(d.correo)) return { canal: "correo", ok: false, destino: d.correo, mensaje: "El proveedor no tiene un correo válido." };
   const adjuntos: { filename: string; content: Buffer; contentType?: string }[] = [];
   for (const doc of d.documentos.slice(0, 10)) {
     const { data } = await supabase.storage.from("documentos").download(doc.ruta);
     if (data) adjuntos.push({ filename: doc.nombre, content: Buffer.from(await data.arrayBuffer()), contentType: doc.tipo ?? undefined });
   }
-  const puerto = Number(process.env.SMTP_PORT || 465);
-  const transporte = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: puerto,
-    secure: puerto === 465,
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-  });
-  const remitente = process.env.CORREO_REMITENTE || process.env.SMTP_USER!;
-  await transporte.sendMail({
-    from: remitente,
+  await transporteCorreo(salida).sendMail({
+    from: salida.from,
+    replyTo: salida.replyTo,
     to: d.correo!,
-    cc: process.env.AVISO_COPIA || undefined,
+    cc: salida.cc,
     subject: "Notificación Comprobante de Pago",
     text: `${d.proveedor}: te hago llegar el comprobante del pago realizado el ${fecha(d.fecha)} por ${dinero(d.importe, d.moneda)} (${d.concepto}). Te agradeceré confirmar de recibido.`,
     html: `<table><tr><td><img src="cid:aviso" alt="Comprobante de pago" style="width:100%;max-width:600px;height:auto"></td></tr></table>`,

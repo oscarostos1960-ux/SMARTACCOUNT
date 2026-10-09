@@ -2,6 +2,7 @@ import "server-only";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { generateText, Output } from "ai";
+import { z } from "zod";
 import { esquemaEstado, type EstadoIA } from "./esquema";
 
 // Modelo de Claude a través de Vercel AI Gateway (en Vercel se autentica solo, sin clave).
@@ -39,14 +40,56 @@ function limpiarXml(texto: string) {
     .slice(0, 400_000);
 }
 
-export async function leerEstadoConIA(archivo: Buffer, tipo: "pdf" | "xml", nombre: string): Promise<{ datos: EstadoIA; modelo: string }> {
+// Clientes con espacio propio: usan SU clave de Anthropic y la llamada va directo a Anthropic
+// (nunca pasa por el crédito de Vercel de Oscar, ni siquiera si su clave falla).
+export const URL_CONSOLA_ANTHROPIC = "https://platform.claude.com/settings/billing";
+export const URL_CLAVES_ANTHROPIC = "https://platform.claude.com/settings/keys";
+const MODELO_DIRECTO = () => process.env.IMPORTADOR_MODELO_DIRECTO || MODELO().replace(/^anthropic\//, "").replace(/\./g, "-");
+const URL_API_ANTHROPIC = () => process.env.ANTHROPIC_API_URL || "https://api.anthropic.com";
+
+async function leerConClavePropia(archivo: Buffer, tipo: "pdf" | "xml", nombre: string, clave: string) {
+  const modelo = MODELO_DIRECTO();
+  const esquema = z.toJSONSchema(esquemaEstado, { target: "draft-7" }) as Record<string, unknown>;
+  delete esquema.$schema;
+  const contenido = tipo === "pdf"
+    ? [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: archivo.toString("base64") }, title: nombre }]
+    : [{ type: "text", text: `Archivo XML (${nombre}):\n${limpiarXml(archivo.toString("utf8"))}` }];
+  const r = await fetch(`${URL_API_ANTHROPIC()}/v1/messages`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-api-key": clave, "anthropic-version": "2023-06-01" },
+    body: JSON.stringify({
+      model: modelo,
+      max_tokens: 32000,
+      temperature: 0,
+      system: INSTRUCCIONES,
+      tools: [{ name: "estado_de_cuenta", description: "Datos extraídos del estado de cuenta", input_schema: esquema }],
+      tool_choice: { type: "tool", name: "estado_de_cuenta" },
+      messages: [{ role: "user", content: [...contenido, { type: "text", text: "Extrae los datos de este estado de cuenta." }] }],
+    }),
+    signal: AbortSignal.timeout(280_000),
+  });
+  const json = await r.json().catch(() => ({})) as { content?: { type: string; input?: unknown }[]; error?: { type?: string; message?: string } };
+  if (!r.ok) {
+    const tipoError = json.error?.type ?? "";
+    if (r.status === 401 || tipoError === "authentication_error") throw new Error("Tu clave de IA no es válida. Revísala en Mi espacio.");
+    if (r.status === 400 && /credit|balance/i.test(json.error?.message ?? "")) throw new Error("Tu cuenta de Anthropic no tiene saldo. Recárgala desde Mi espacio → Recargar crédito.");
+    if (r.status === 429) throw new Error("Anthropic limitó tus lecturas por ahora (demasiadas seguidas). Intenta en unos minutos.");
+    throw new Error(`Anthropic respondió ${r.status}: ${(json.error?.message ?? "").slice(0, 200)}`);
+  }
+  const uso = json.content?.find((c) => c.type === "tool_use");
+  if (!uso?.input) throw new Error("La IA no devolvió los datos del estado de cuenta.");
+  return { datos: esquemaEstado.parse(uso.input), modelo: `anthropic/${modelo} (clave propia)` };
+}
+
+export async function leerEstadoConIA(archivo: Buffer, tipo: "pdf" | "xml", nombre: string, clavePropia?: string | null): Promise<{ datos: EstadoIA; modelo: string }> {
   // Pruebas locales: respuestas guardadas en una carpeta (sin llamar a la IA)
   if (process.env.IMPORTADOR_SIMULADO) {
     const espera = Number(process.env.IMPORTADOR_SIMULADO_ESPERA) || 0;
     if (espera) await new Promise((r) => setTimeout(r, espera));
     const json = await readFile(join(process.env.IMPORTADOR_SIMULADO, `${nombre}.json`), "utf8");
-    return { datos: esquemaEstado.parse(JSON.parse(json)), modelo: "simulado" };
+    return { datos: esquemaEstado.parse(JSON.parse(json)), modelo: clavePropia ? "simulado (clave propia)" : "simulado" };
   }
+  if (clavePropia) return leerConClavePropia(archivo, tipo, nombre, clavePropia);
   const modelo = MODELO();
   const contenido = tipo === "pdf"
     ? [{ type: "file" as const, mediaType: "application/pdf", data: archivo, filename: nombre }]

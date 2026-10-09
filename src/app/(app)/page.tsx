@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { obtenerPerfil } from "@/lib/auth";
+import { obtenerEspacio, obtenerPerfil } from "@/lib/auth";
 import { Landmark, Users, Tag, Tags, CheckCircle2, Circle, ChevronRight, CalendarClock, CircleDot, CreditCard, Building2 } from "lucide-react";
 import ResumenSaldos from "@/components/ResumenSaldos";
 import { caraTarjeta } from "@/components/Plastico";
@@ -18,11 +18,12 @@ const FASES: { n: number; texto: string; estado: "lista" | "curso" | "pendiente"
 ];
 
 export default async function Inicio() {
-  const perfil = await obtenerPerfil();
+  const [perfil, espacio] = await Promise.all([obtenerPerfil(), obtenerEspacio()]);
   const supabase = await createClient();
   const contar = async (tabla: string, activo: string) =>
     (await supabase.from(tabla).select("id", { count: "exact", head: true }).eq(activo, true)).count ?? 0;
 
+  const contarTodos = async (tabla: string) => (await supabase.from(tabla).select("id", { count: "exact", head: true })).count ?? 0;
   const hoy = hoyCDMX();
   const [cuentas, proveedores, conceptos, clasificaciones, saldosR, pagosR] = await Promise.all([
     contar("cuentas", "activa"), contar("proveedores", "activo"),
@@ -42,6 +43,17 @@ export default async function Inicio() {
     { texto: "Conceptos", valor: conceptos, href: "/catalogos/conceptos", icono: Tag, chip: "bg-ok-soft text-ok" },
     { texto: "Clasificaciones", valor: clasificaciones, href: "/catalogos/clasificaciones", icono: Tags, chip: "bg-warn-soft text-warn" },
   ];
+
+  // Espacios de clientes: en lugar del avance del proyecto, una guía de primeros pasos
+  const pasos = espacio.principal ? [] : [
+    { texto: "Agrega tu clave de IA para leer estados de cuenta", listo: !!espacio.ia_clave_fin, href: "/mi-espacio#ia", soloTitular: true },
+    { texto: "Da de alta tus bancos", listo: (await contarTodos("bancos")) > 0, href: "/catalogos/bancos" },
+    { texto: "Crea tus cuentas (cheques y tarjetas, con sus últimos 4 dígitos)", listo: cuentas > 0, href: "/catalogos/cuentas" },
+    { texto: "Registra a tus proveedores", listo: proveedores > 0, href: "/catalogos/proveedores" },
+    { texto: "Crea tus clasificaciones (por ejemplo: Casa, Oficina)", listo: clasificaciones > 0, href: "/catalogos/clasificaciones" },
+    { texto: "Importa tu primer estado de cuenta", listo: (await contarTodos("importaciones")) > 0, href: "/importar" },
+    { texto: "Opcional: configura tu correo para los avisos de pago", listo: espacio.smtp_activo, href: "/mi-espacio#correo", soloTitular: true },
+  ].filter((p) => !p.soloTitular || perfil.rol === "titular");
 
   const tarjetasCredito = saldos.filter((c) => c.naturaleza === "credito").sort((a, b) => a.nombre.localeCompare(b.nombre));
   const colorDe = new Map(tarjetasCredito.map((c, i) => [c.cuenta_id, caraTarjeta(c.nombre, i)]));
@@ -139,7 +151,24 @@ export default async function Inicio() {
         ))}
       </section>
 
-      <section className="card mt-8 p-6" aria-labelledby="avance">
+      {!espacio.principal && (
+        <section className="card mt-8 p-6" aria-labelledby="pasos" data-primeros-pasos>
+          <h2 id="pasos" className="text-base font-extrabold text-primary">Primeros pasos</h2>
+          <ol className="mt-4 space-y-2">
+            {pasos.map((p) => (
+              <li key={p.href + p.texto}>
+                <Link href={p.href} className="flex items-center gap-3 rounded-lg px-2 py-1.5 text-sm hover:bg-surface-2" data-paso={p.listo ? "listo" : "pendiente"}>
+                  {p.listo ? <CheckCircle2 className="h-5 w-5 shrink-0 text-ok" aria-label="Listo" /> : <Circle className="h-5 w-5 shrink-0 text-border" aria-label="Pendiente" />}
+                  <span className={p.listo ? "text-muted line-through" : "font-semibold"}>{p.texto}</span>
+                  {!p.listo && <ChevronRight className="ml-auto h-4 w-4 shrink-0 text-muted" aria-hidden />}
+                </Link>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+
+      {espacio.principal && <section className="card mt-8 p-6" aria-labelledby="avance">
         <h2 id="avance" className="text-base font-extrabold text-primary">Avance del nuevo Smart Account</h2>
         <ol className="mt-4 space-y-3">
           {FASES.map((f) => (
@@ -154,7 +183,7 @@ export default async function Inicio() {
             </li>
           ))}
         </ol>
-      </section>
+      </section>}
     </div>
   );
 }

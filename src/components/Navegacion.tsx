@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
   Home, ArrowLeftRight, FileSearch, CalendarClock, Upload, BarChart3, Landmark, Users, Tag, Tags,
-  Building2, Coins, Layers, ShieldCheck, Menu, X, LogOut, Wand2, KeyRound,
+  Building2, Coins, Layers, ShieldCheck, Menu, X, LogOut, Wand2, KeyRound, Settings,
 } from "lucide-react";
 import Logo from "./Logo";
 
@@ -35,10 +35,13 @@ const SECCIONES: { titulo?: string; items: Item[]; soloTitular?: boolean }[] = [
       { href: "/catalogos/tipos-cuenta", texto: "Tipos de cuenta", icono: Layers },
     ],
   },
-  { titulo: "Administración", soloTitular: true, items: [{ href: "/usuarios", texto: "Usuarios y permisos", icono: ShieldCheck }] },
+  { titulo: "Administración", soloTitular: true, items: [
+    { href: "/usuarios", texto: "Usuarios y permisos", icono: ShieldCheck },
+    { href: "/mi-espacio", texto: "Mi espacio", icono: Settings },
+  ] },
 ];
 
-export default function Navegacion({ nombre, rol }: { nombre: string; rol: string }) {
+export default function Navegacion({ nombre, rol, espacio }: { nombre: string; rol: string; espacio?: string | null }) {
   const ruta = usePathname();
   const [abierto, setAbierto] = useState(false);
 
@@ -48,7 +51,7 @@ export default function Navegacion({ nombre, rol }: { nombre: string; rol: strin
         <Logo claro />
         <div>
           <p className="font-extrabold leading-tight text-nav-text">Smart Account</p>
-          <p className="text-xs text-nav-muted">Finanzas personales</p>
+          <p className="text-xs text-nav-muted" data-espacio>{espacio || "Finanzas personales"}</p>
         </div>
       </div>
       <div className="flex-1 space-y-6 overflow-y-auto px-3 pb-4">

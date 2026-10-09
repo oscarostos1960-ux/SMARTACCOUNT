@@ -1,6 +1,9 @@
 import "server-only";
 import { gateway } from "ai";
-import { ExternalLink, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { ExternalLink, KeyRound, Sparkles } from "lucide-react";
+import { obtenerEspacio } from "@/lib/auth";
+import { URL_CONSOLA_ANTHROPIC } from "@/lib/importador/ia";
 import { createClient } from "@/lib/supabase/server";
 
 // Saldo del crédito de IA (Vercel AI Gateway) con el que se leen los estados de cuenta.
@@ -26,7 +29,33 @@ const URL_RECARGA = process.env.NEXT_PUBLIC_URL_RECARGA_IA || "https://vercel.co
 
 const usd = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
 
+// Clientes con espacio propio: leen con su propia cuenta de Anthropic y pagan lo que consumen.
+function CreditoPropio({ fin }: { fin: string | null }) {
+  return (
+    <section className="card flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 text-sm" aria-label="Crédito de IA" data-credito-ia data-clave-propia={fin ? "si" : "no"}>
+      <p className="flex items-center gap-1.5 font-medium"><Sparkles className="h-4 w-4 text-primary" aria-hidden /> Crédito de IA</p>
+      {fin ? (
+        <p className="min-w-48 flex-1 text-muted">Usas tu propia cuenta de Anthropic (clave ••••{fin}). Cada estado de cuenta se cobra a esa cuenta.</p>
+      ) : (
+        <p className="min-w-48 flex-1 font-medium text-danger">Para leer estados de cuenta con IA primero agrega tu clave en Mi espacio.</p>
+      )}
+      {fin ? (
+        <a href={URL_CONSOLA_ANTHROPIC} target="_blank" rel="noopener noreferrer" data-recargar-ia className="btn-secondary shrink-0 text-sm"
+          title="Abre tu cuenta de Anthropic para ver tu saldo y recargar crédito">
+          Ver saldo y recargar <ExternalLink className="h-4 w-4" aria-hidden />
+        </a>
+      ) : (
+        <Link href="/mi-espacio#ia" className="btn-primary shrink-0 text-sm" data-ir-mi-espacio>
+          <KeyRound className="h-4 w-4" aria-hidden /> Agregar mi clave de IA
+        </Link>
+      )}
+    </section>
+  );
+}
+
 export default async function CreditoIA() {
+  const espacio = await obtenerEspacio();
+  if (!espacio.principal) return <CreditoPropio fin={espacio.ia_clave_fin} />;
   const credito = await leerCredito();
   if (!credito) return null;
   const { saldo, usado } = credito;
