@@ -66,9 +66,10 @@ export async function crearUsuario(_prev: Resultado, formData: FormData): Promis
   if (error || !data.user) {
     return { error: /already|exists|registered/i.test(error?.message ?? "") ? "Ya existe un usuario con ese correo." : `No se pudo crear el usuario (${error?.message ?? "sin respuesta"}).` };
   }
-  // El trigger lo crea como "pendiente": se le asigna el rol elegido y su nombre
-  const supabase = await createClient();
-  await supabase.from("perfiles").update({ rol, ...(nombre ? { nombre } : {}) }).eq("id", data.user.id);
+  // El trigger lo crea como "pendiente" (y sin saber su espacio): se le asignan espacio, rol y nombre
+  const { error: e2 } = await admin.from("perfiles")
+    .update({ espacio_id: yo.espacio_id, rol, ...(nombre ? { nombre } : {}) }).eq("id", data.user.id);
+  if (e2) return { error: `Se creó el usuario pero no se pudo asignar su permiso (${e2.message}).` };
   revalidatePath("/usuarios");
   return {
     ok: `Usuario creado. Mándale estos datos: entra a smartaccount2026.vercel.app con ${correo} y la contraseña temporal ${contrasena}. Al entrar le pedirá cambiarla.${rol === "usuario" ? " Ahora elige a qué cuentas tendrá acceso." : ""}`,
@@ -145,7 +146,10 @@ export async function crearCliente(_prev: Resultado, formData: FormData): Promis
     return { error: /already|exists|registered/i.test(error?.message ?? "") ? "Ya existe un usuario con ese correo." : `No se pudo crear el usuario (${error?.message ?? "sin respuesta"}).` };
   }
   await admin.from("espacios").update({ titular_id: data.user.id }).eq("id", esp.id);
-  if (nombre) await admin.from("perfiles").update({ nombre }).eq("id", data.user.id);
+  // Supabase guarda app_metadata después de crear el perfil: el espacio y el rol se asignan aquí
+  const { error: e2 } = await admin.from("perfiles")
+    .update({ espacio_id: Number(esp.id), rol: "titular", ...(nombre ? { nombre } : {}) }).eq("id", data.user.id);
+  if (e2) return { error: `Se creó el usuario pero no se pudo asignar su espacio (${e2.message}).` };
   revalidatePath("/usuarios");
   return {
     ok: `Cliente creado con su propio espacio en blanco. Mándale estos datos: entra a smartaccount2026.vercel.app con ${correo} y la contraseña temporal ${contrasena}. Al entrar le pedirá cambiarla; después, en "Mi espacio", agrega su clave de IA y, si quiere, su correo para los avisos.`,
