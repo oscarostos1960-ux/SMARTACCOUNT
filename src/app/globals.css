@@ -72,3 +72,8 @@ body {
 @utility label { @apply mb-1 block text-sm font-medium text-text; }
 @utility card { @apply rounded-2xl border border-border bg-surface; }
 @utility badge { @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium; }
+
+/* Celular: letra más grande (todo se mide en rem, así que crece parejo) */
+@media (max-width: 639px) {
+  html { font-size: 18px; }
+}

@@ -118,7 +118,7 @@ export default function DialogoPlan({
   return (
     <Dialogo titulo={soloLectura ? "Pago programado" : p ? "Editar pago programado" : "Nuevo pago programado"} refDialogo={dialogo} onCerrar={onCerrar}>
       <form action={formAction}>
-        <fieldset disabled={soloLectura} className="grid max-h-[68vh] grid-cols-1 gap-4 overflow-y-auto px-5 py-4 sm:grid-cols-6">
+        <fieldset disabled={soloLectura} className="grid max-h-[68vh] grid-cols-1 gap-4 max-sm:max-h-[calc(100dvh-8rem)] overflow-y-auto px-5 py-4 sm:grid-cols-6">
           {p && !p.activo && (
             <p className="rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn sm:col-span-6">Este pago está pausado: no se crean fechas nuevas.</p>
           )}
@@ -193,23 +193,23 @@ export default function DialogoPlan({
             </>
           )}
 
-          <Campo id="p-desc" etiqueta="Transacción" className="sm:col-span-4">
+          <Campo id="p-desc" etiqueta="Transacción" className="sm:col-span-4 max-sm:hidden">
             <ComboTexto id="p-desc" nombre="descripcion" valor={textos.descripcion} onCambio={ponerTexto("descripcion")} onElegir={(x) => alElegir("descripcion", x)} opciones={opciones.descripcion} maxLength={250} />
           </Campo>
-          <Campo id="p-ref" etiqueta="Cheque / referencia" className="sm:col-span-2">
+          <Campo id="p-ref" etiqueta="Cheque / referencia" className="sm:col-span-2 max-sm:hidden">
             <input id="p-ref" name="referencia" type="text" defaultValue={val("referencia", p?.referencia ?? "")} className="input" maxLength={100} />
           </Campo>
-          <Campo id="p-l1" etiqueta="Leyenda 1" className="sm:col-span-6">
+          <Campo id="p-l1" etiqueta="Leyenda 1" className="sm:col-span-6 max-sm:hidden">
             <ComboTexto id="p-l1" nombre="leyenda1" valor={textos.leyenda1} onCambio={ponerTexto("leyenda1")} onElegir={(x) => alElegir("leyenda1", x)} opciones={opciones.leyenda1} maxLength={255} />
           </Campo>
-          <Campo id="p-l2" etiqueta="Leyenda 2" className="sm:col-span-6">
+          <Campo id="p-l2" etiqueta="Leyenda 2" className="sm:col-span-6 max-sm:hidden">
             <ComboTexto id="p-l2" nombre="leyenda2" valor={textos.leyenda2} onCambio={ponerTexto("leyenda2")} onElegir={(x) => alElegir("leyenda2", x)} opciones={opciones.leyenda2} maxLength={255} />
           </Campo>
-          <Campo id="p-l3" etiqueta="Leyenda 3" className="sm:col-span-6">
+          <Campo id="p-l3" etiqueta="Leyenda 3" className="sm:col-span-6 max-sm:hidden">
             <ComboTexto id="p-l3" nombre="leyenda3" valor={textos.leyenda3} onCambio={ponerTexto("leyenda3")} onElegir={(x) => alElegir("leyenda3", x)} opciones={opciones.leyenda3} maxLength={500} />
           </Campo>
           {clasificaciones.length > 0 && (
-            <fieldset className="sm:col-span-6">
+            <fieldset className="sm:col-span-6 max-sm:hidden">
               <legend className="label">Clasificaciones</legend>
               <div key={`k${version}`} className="flex flex-wrap gap-2">
                 {clasificaciones.filter((c) => c.activo || clasifElegidas.has(String(c.id))).map((c) => (
@@ -229,8 +229,8 @@ export default function DialogoPlan({
           <fieldset className="sm:col-span-6">
             <legend className="label">Avisar al proveedor cuando se pague</legend>
             <div className="flex flex-wrap gap-4 text-sm">
-              <label className="flex items-center gap-2"><input type="checkbox" name="avisar_whatsapp" defaultChecked={p?.avisar_whatsapp} /> WhatsApp</label>
-              <label className="flex items-center gap-2"><input type="checkbox" name="avisar_correo" defaultChecked={p?.avisar_correo} /> Correo</label>
+              <label className="flex items-center gap-2"><input type="checkbox" name="avisar_whatsapp" defaultChecked={p?.avisar_whatsapp} className="h-5 w-5" /> WhatsApp</label>
+              <label className="flex items-center gap-2"><input type="checkbox" name="avisar_correo" defaultChecked={p?.avisar_correo} className="h-5 w-5" /> Correo</label>
             </div>
             <p className="mt-1 text-xs text-muted">Se envían solos al registrar el pago: la imagen con los datos del pago y los documentos adjuntos.</p>
           </fieldset>

@@ -33,7 +33,7 @@ export function Dialogo({ titulo, refDialogo, onCerrar, children }: {
       ref={refDialogo}
       onClose={onCerrar}
       aria-labelledby="titulo-dialogo"
-      className="m-auto w-[calc(100%-2rem)] max-w-2xl rounded-xl border border-border bg-surface p-0 text-text shadow-xl backdrop:bg-black/40"
+      className="m-auto w-[calc(100%-2rem)] max-w-2xl rounded-xl border border-border bg-surface p-0 text-text shadow-xl backdrop:bg-black/40 max-sm:h-dvh max-sm:max-h-dvh max-sm:w-full max-sm:max-w-none max-sm:rounded-none max-sm:border-0"
     >
       <div className="flex items-center justify-between border-b border-border px-5 py-4">
         <h2 id="titulo-dialogo" className="text-lg font-semibold">{titulo}</h2>
@@ -146,6 +146,9 @@ export function DialogoMovimiento({
   const e = estado.errores ?? {};
   const soloLectura = !puedeEditar;
   const titulo = tituloFijo ?? (soloLectura ? "Detalle del movimiento" : m ? `Editar movimiento · folio ${m.folio}` : "Nuevo movimiento");
+  // Celular, movimiento nuevo: solo proveedor, fecha, tipo, importe, concepto y observaciones.
+  // Los demás campos se ocultan pero conservan lo que se prellena (folio automático por fecha).
+  const extra = m ? "" : "max-sm:hidden";
 
   async function cambiarCuenta(id: string) {
     const nueva = cuentas?.find((c) => String(c.cuenta_id) === id);
@@ -176,7 +179,7 @@ export function DialogoMovimiento({
   return (
     <Dialogo titulo={titulo} refDialogo={dialogo} onCerrar={onCerrar}>
       <form action={formAction}>
-        <fieldset disabled={soloLectura || subiendo || enviandoAviso || terminado} className="grid max-h-[68vh] grid-cols-1 gap-4 overflow-y-auto px-5 py-4 sm:grid-cols-6">
+        <fieldset disabled={soloLectura || subiendo || enviandoAviso || terminado} className="grid max-h-[68vh] grid-cols-1 gap-4 max-sm:max-h-[calc(100dvh-8rem)] overflow-y-auto px-5 py-4 sm:grid-cols-6">
           {m?.transferencia_id && (
             <p className="rounded-lg bg-primary-soft px-3 py-2 text-sm text-primary sm:col-span-6">
               Este movimiento es parte de una transferencia. Si lo eliminas, también se elimina el movimiento de la otra cuenta.
@@ -206,14 +209,14 @@ export function DialogoMovimiento({
             <Combobox id="m-proveedor" nombre="proveedor_id" opciones={proveedoresVisibles} valorInicial={val("proveedor_id", m?.proveedor_id ? String(m.proveedor_id) : inicial?.proveedor_id ?? "")} placeholder="Buscar proveedor…" onCambio={alElegirProveedor} onCrear={altaRapida(crearProveedorRapido)} />
           </Campo>
 
-          <Campo id="m-folio" etiqueta="Folio" error={e.folio} className="sm:col-span-2"
-            ayuda={m ? "Si lo cambias, el movimiento se mueve a ese lugar." : "Si usas un folio ya ocupado, se inserta ahí y los siguientes se recorren."}>
+          <Campo id="m-folio" etiqueta="Folio" error={e.folio} className={`sm:col-span-2 ${extra}`}
+            ayuda={m ? "Si cambias la fecha, se acomoda solo; si cambias el folio, se mueve a ese lugar." : "Se acomoda solo según la fecha. Si escribes un folio ya ocupado, se inserta ahí y los siguientes se recorren."}>
             <input key={folio.version} id="m-folio" name="folio" type="text" inputMode="numeric" defaultValue={folio.version ? String(folio.valor) : val("folio", m ? String(m.folio) : String(folio.valor))} className="input num" aria-invalid={!!e.folio} />
           </Campo>
           <Campo id="m-fecha" etiqueta="Fecha" requerido error={e.fecha} className="sm:col-span-2">
             <input id="m-fecha" name="fecha" type="date" required defaultValue={val("fecha", m?.fecha ?? hoyCDMX())} className="input" aria-invalid={!!e.fecha} />
           </Campo>
-          <Campo id="m-ref" etiqueta="Cheque / referencia" className="sm:col-span-2">
+          <Campo id="m-ref" etiqueta="Cheque / referencia" className={`sm:col-span-2 ${extra}`}>
             <input id="m-ref" name="referencia" type="text" defaultValue={val("referencia", m?.referencia ?? p?.referencia ?? "")} className="input" maxLength={100} />
           </Campo>
 
@@ -236,16 +239,16 @@ export function DialogoMovimiento({
             <Campo id="m-monto" etiqueta={`Importe (${cuentaSel.moneda})`} requerido error={e.monto} className="sm:col-span-3">
               <input id="m-monto" name="monto" type="text" inputMode="decimal" required defaultValue={montoInicial} className="input num text-right" aria-invalid={!!e.monto} placeholder="0.00" />
             </Campo>
-            <Campo id="m-desc" etiqueta="Transacción" error={e.descripcion} className="sm:col-span-6">
+            <Campo id="m-desc" etiqueta="Transacción" error={e.descripcion} className={`sm:col-span-6 ${extra}`}>
               <input id="m-desc" name="descripcion" type="text" defaultValue={val("descripcion", m?.descripcion ?? p?.descripcion ?? "")} className="input" maxLength={250} aria-invalid={!!e.descripcion} />
             </Campo>
-            <Campo id="m-l1" etiqueta="Leyenda 1" className="sm:col-span-6">
+            <Campo id="m-l1" etiqueta="Leyenda 1" className={`sm:col-span-6 ${extra}`}>
               <input id="m-l1" name="leyenda1" type="text" defaultValue={val("leyenda1", m?.leyenda1 ?? p?.leyenda1 ?? "")} className="input" maxLength={255} />
             </Campo>
-            <Campo id="m-l2" etiqueta="Leyenda 2" className="sm:col-span-6">
+            <Campo id="m-l2" etiqueta="Leyenda 2" className={`sm:col-span-6 ${extra}`}>
               <input id="m-l2" name="leyenda2" type="text" defaultValue={val("leyenda2", m?.leyenda2 ?? p?.leyenda2 ?? "")} className="input" maxLength={255} />
             </Campo>
-            <Campo id="m-l3" etiqueta="Leyenda 3" className="sm:col-span-6">
+            <Campo id="m-l3" etiqueta="Leyenda 3" className={`sm:col-span-6 ${extra}`}>
               <input id="m-l3" name="leyenda3" type="text" defaultValue={val("leyenda3", m?.leyenda3 ?? p?.leyenda3 ?? "")} className="input" maxLength={500} />
             </Campo>
             <Campo id="m-concepto" etiqueta="Concepto" className={cuentaSel.moneda !== "MXN" ? "sm:col-span-4" : "sm:col-span-6"}>
@@ -259,7 +262,7 @@ export function DialogoMovimiento({
               <input type="hidden" name="tipo_cambio" value={m ? String(Number(m.tipo_cambio)) : "1"} />
             )}
             {clasifVisibles.length > 0 && (
-              <fieldset className="sm:col-span-6">
+              <fieldset className={`sm:col-span-6 ${extra}`}>
                 <legend className="label">Clasificaciones</legend>
                 <div className="flex flex-wrap gap-2">
                   {clasifVisibles.map((c) => (
@@ -285,7 +288,7 @@ export function DialogoMovimiento({
             </>
           ) : (
             <div
-              className="sm:col-span-6"
+              className="sm:col-span-6 max-sm:hidden"
               onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }}
               onDrop={(e) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); setArchivos((a) => [...a, ...e.dataTransfer.files]); } }}
             >
@@ -302,6 +305,9 @@ export function DialogoMovimiento({
         )}
         {resultadoAvisos && (
           <div className="mx-5 mb-3"><ListaResultados resultados={resultadoAvisos} /></div>
+        )}
+        {!m && (e.descripcion || e.folio) && (
+          <p role="alert" className="mx-5 mb-3 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger sm:hidden">{e.descripcion ?? e.folio}</p>
         )}
         {(estado.error || errorBorrar || errorArchivos) && (
           <p role="alert" className="mx-5 mb-3 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{errorArchivos ?? errorBorrar ?? estado.error}</p>

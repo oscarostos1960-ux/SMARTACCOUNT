@@ -28,7 +28,7 @@ export default function BarraMovil({ cuentas, esTitular }: { cuentas: CuentaRapi
     router.push(`/transacciones/${id}?nuevo=1`);
   }
 
-  const item = "flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-medium";
+  const item = "flex flex-1 flex-col items-center gap-0.5 py-2 text-xs font-medium";
   const activo = (href: string) => (href === "/" ? ruta === "/" : ruta.startsWith(href)) ? "text-primary" : "text-muted";
 
   return (
