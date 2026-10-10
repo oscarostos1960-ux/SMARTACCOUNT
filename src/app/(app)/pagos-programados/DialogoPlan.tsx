@@ -5,6 +5,8 @@ import { Pause, Play, Trash2 } from "lucide-react";
 import Combobox from "@/components/Combobox";
 import ComboTexto, { type OpcionTexto } from "@/components/ComboTexto";
 import { Campo, Dialogo, type Opcion } from "@/components/movimientos/DialogoMovimiento";
+import { crearConceptoRapido, crearProveedorRapido } from "@/app/(app)/catalogos/rapido";
+import type { OpcionCombo } from "@/components/Combobox";
 import type { Clasif } from "@/components/movimientos/TablaMovimientos";
 import { fecha as fechaTexto, hoyCDMX } from "@/lib/formato";
 import { FRECUENCIAS, describirFrecuencia, type PagoProgramado } from "@/lib/pagos";
@@ -30,6 +32,13 @@ function opcionesDe(registros: RegistroProveedor[], campo: CampoTexto): OpcionTe
     .slice(0, 30)
     .map((o) => ({ texto: o.texto, detalle: `${o.veces === 1 ? "1 vez" : `${o.veces} veces`} · último ${fechaTexto(o.ultima)}` }));
 }
+
+// Alta rápida de proveedor o concepto desde la lista (si no existe todavía)
+const altaRapida = (fn: (t: string) => Promise<{ valor?: string; etiqueta?: string; error?: string }>) =>
+  async (t: string): Promise<OpcionCombo | { error: string }> => {
+    const r = await fn(t);
+    return r.valor ? { valor: r.valor, etiqueta: r.etiqueta ?? t } : { error: r.error ?? "No se pudo dar de alta." };
+  };
 
 export default function DialogoPlan({
   pago, cuentas, conceptos, proveedores, clasificaciones, esTitular, onCerrar,
@@ -130,7 +139,7 @@ export default function DialogoPlan({
 
           <Campo id="p-proveedor" etiqueta="A favor de (proveedor)" error={e.proveedor_id} className="sm:col-span-6">
             <Combobox id="p-proveedor" nombre="proveedor_id" opciones={proveedores.filter((x) => x.activo || x.valor === String(p?.proveedor_id))}
-              valorInicial={proveedorInicial} placeholder="Buscar proveedor…" onCambio={(x) => void cargarHistorial(x, !p)} />
+              valorInicial={proveedorInicial} placeholder="Buscar proveedor…" onCambio={(x) => void cargarHistorial(x, !p)} onCrear={altaRapida(crearProveedorRapido)} />
           </Campo>
           {t && !p && (
             <p className="rounded-lg bg-primary-soft px-3 py-2 text-sm text-primary sm:col-span-6" data-prellenado>
@@ -139,7 +148,7 @@ export default function DialogoPlan({
           )}
           <Campo id="p-concepto" etiqueta="Concepto" className="sm:col-span-3">
             <Combobox key={`c${version}`} id="p-concepto" nombre="concepto_id" opciones={conceptos.filter((c) => c.activo || c.valor === String(p?.concepto_id))}
-              valorInicial={val("concepto_id", t?.concepto_id || (p?.concepto_id ? String(p.concepto_id) : ""))} placeholder="Buscar concepto…" />
+              valorInicial={val("concepto_id", t?.concepto_id || (p?.concepto_id ? String(p.concepto_id) : ""))} placeholder="Buscar concepto…" onCrear={altaRapida(crearConceptoRapido)} />
           </Campo>
           <Campo id="p-cuenta" etiqueta="Cuenta para pagar" className="sm:col-span-3" ayuda="Se propone al registrar el pago; la puedes cambiar.">
             <select key={`a${version}`} id="p-cuenta" name="cuenta_id" defaultValue={val("cuenta_id", t?.cuenta_id && cuentas.some((c) => c.activa && String(c.cuenta_id) === t.cuenta_id) ? t.cuenta_id : p?.cuenta_id ? String(p.cuenta_id) : "")} className="input">

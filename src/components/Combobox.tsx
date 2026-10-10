@@ -128,6 +128,21 @@ export default function Combobox({
           role="listbox"
           className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-border bg-surface py-1 shadow-lg"
         >
+          {/* La opción de alta va arriba: en el celular el teclado tapa el final de la lista */}
+          {puedeCrear && (
+            <li
+              id={`${listaId}-${filtradas.length}`}
+              role="option"
+              aria-selected={false}
+              data-crear
+              className={`flex cursor-pointer items-center gap-1.5 border-b border-border px-3 py-2 text-sm font-medium text-primary ${activo === filtradas.length ? "bg-primary-soft" : "hover:bg-surface-2"}`}
+              onMouseDown={(e) => { e.preventDefault(); crear(); }}
+              onMouseEnter={() => setActivo(filtradas.length)}
+            >
+              {creando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}
+              Agregar &quot;{nuevo.toUpperCase()}&quot;
+            </li>
+          )}
           {filtradas.length === 0 && !puedeCrear ? (
             <li className="px-3 py-2 text-sm text-muted">Sin coincidencias</li>
           ) : (
@@ -148,20 +163,6 @@ export default function Combobox({
                 {o.detalle && <span className="ml-2 text-xs text-muted">{o.detalle}</span>}
               </li>
             ))
-          )}
-          {puedeCrear && (
-            <li
-              id={`${listaId}-${filtradas.length}`}
-              role="option"
-              aria-selected={false}
-              data-crear
-              className={`flex cursor-pointer items-center gap-1.5 border-t border-border px-3 py-2 text-sm font-medium text-primary ${activo === filtradas.length ? "bg-primary-soft" : "hover:bg-surface-2"}`}
-              onMouseDown={(e) => { e.preventDefault(); crear(); }}
-              onMouseEnter={() => setActivo(filtradas.length)}
-            >
-              {creando ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}
-              Agregar &quot;{nuevo.toUpperCase()}&quot;
-            </li>
           )}
         </ul>
       )}
