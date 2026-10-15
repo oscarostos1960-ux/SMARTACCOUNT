@@ -2,10 +2,14 @@
 
 import { useActionState } from "react";
 import { iniciarSesion, type EstadoLogin } from "./actions";
+import InputContrasena from "@/components/InputContrasena";
+import EntrarConHuella from "@/components/EntrarConHuella";
 
 export default function FormLogin() {
   const [estado, accion, enviando] = useActionState<EstadoLogin, FormData>(iniciarSesion, {});
   return (
+    <>
+    <EntrarConHuella />
     <form action={accion} className="space-y-4">
       <div>
         <label htmlFor="correo" className="label">Correo electrónico</label>
@@ -13,7 +17,7 @@ export default function FormLogin() {
       </div>
       <div>
         <label htmlFor="password" className="label">Contraseña</label>
-        <input id="password" name="password" type="password" autoComplete="current-password" required className="input" />
+        <InputContrasena id="password" name="password" autoComplete="current-password" required className="input" />
       </div>
       {estado.error && (
         <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{estado.error}</p>
@@ -22,5 +26,6 @@ export default function FormLogin() {
         {enviando ? "Entrando…" : "Entrar"}
       </button>
     </form>
+    </>
   );
 }

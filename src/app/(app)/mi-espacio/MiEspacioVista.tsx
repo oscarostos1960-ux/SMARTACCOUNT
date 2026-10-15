@@ -4,6 +4,7 @@ import { useActionState, useState, useTransition } from "react";
 import { CheckCircle2, ExternalLink, KeyRound, Mail, Send, Sparkles, Trash2 } from "lucide-react";
 import type { Espacio } from "@/lib/auth";
 import { PROVEEDORES_CORREO } from "@/lib/correo-proveedores";
+import InputContrasena from "@/components/InputContrasena";
 import { guardarClaveIA, guardarCorreo, guardarDatos, probarCorreo, quitarClaveIA, quitarCorreo, type Resultado } from "./actions";
 
 // Ligas de Anthropic (la empresa de la IA). Se repiten aquí porque este archivo corre en el navegador.
@@ -85,7 +86,7 @@ function SeccionIA({ espacio }: { espacio: Espacio }) {
       <form action={guardar} className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="flex-1">
           <label htmlFor="ia-clave" className="label">{lista ? "Cambiar por otra clave" : "Tu clave de Anthropic"}</label>
-          <input id="ia-clave" name="clave" type="password" autoComplete="off" required className="input" placeholder="sk-ant-…" />
+          <InputContrasena id="ia-clave" name="clave" autoComplete="off" required className="input" placeholder="sk-ant-…" />
         </div>
         <button className="btn-primary" disabled={guardando} data-guardar-ia><KeyRound className="h-4 w-4" aria-hidden /> {guardando ? "Comprobando…" : "Guardar clave"}</button>
       </form>
@@ -145,7 +146,7 @@ function SeccionCorreo({ espacio, correoTitular, correoGeneral }: { espacio: Esp
         </div>
         <div>
           <label htmlFor="co-pass" className="label">Contraseña de aplicación</label>
-          <input id="co-pass" name="contrasena" type="password" autoComplete="off" required className="input" placeholder={espacio.smtp_activo ? "Escríbela de nuevo para cambiar algo" : "16 letras que te da tu correo"} />
+          <InputContrasena id="co-pass" name="contrasena" autoComplete="off" required className="input" placeholder={espacio.smtp_activo ? "Escríbela de nuevo para cambiar algo" : "16 letras que te da tu correo"} />
         </div>
         {proveedor === "otro" && (
           <>

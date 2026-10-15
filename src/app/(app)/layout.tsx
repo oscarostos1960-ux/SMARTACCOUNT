@@ -3,6 +3,7 @@ import { obtenerEspacio, obtenerPerfil, obtenerPermisos } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import Navegacion from "@/components/Navegacion";
 import BarraMovil, { type CuentaRapida } from "@/components/BarraMovil";
+import GuardiaApp from "@/components/GuardiaApp";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const perfil = await obtenerPerfil();
@@ -33,6 +34,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       <Navegacion nombre={perfil.nombre} rol={perfil.rol} espacio={espacio.principal ? null : espacio.nombre} />
       <main className="px-4 pb-28 pt-6 sm:px-6 lg:ml-64 lg:px-10 lg:py-10">{children}</main>
       <BarraMovil cuentas={cuentasRapidas} esTitular={permisos.esTitular} />
+      <GuardiaApp />
     </div>
   );
 }

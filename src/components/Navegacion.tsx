@@ -97,7 +97,7 @@ export default function Navegacion({ nombre, rol, espacio }: { nombre: string; r
         <p className="truncate text-sm font-semibold text-nav-text">{nombre}</p>
         <p className="text-xs capitalize text-nav-muted">{rol === "usuario" ? "Acceso por cuenta" : rol}</p>
         <Link href="/cambiar-contrasena" onClick={() => setAbierto(false)} className="mt-2 inline-flex items-center gap-1.5 text-xs text-nav-muted hover:text-nav-activo">
-          <KeyRound className="h-3.5 w-3.5" aria-hidden /> Cambiar contraseña
+          <KeyRound className="h-3.5 w-3.5" aria-hidden /> Contraseña y Face ID / huella
         </Link>
         <form action="/auth/salir" method="post" className="mt-3">
           <button className="btn w-full border border-white/25 text-nav-text hover:bg-white/10"><LogOut className="h-4 w-4" aria-hidden /> Salir</button>

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Logo from "@/components/Logo";
 import FormCambio from "./FormCambio";
+import SeccionHuella from "./SeccionHuella";
 
 export const metadata: Metadata = { title: "Cambiar contraseña" };
 
@@ -26,6 +27,7 @@ export default async function CambiarContrasenaPage() {
         <div className="card border-0 p-6 shadow-xl">
           <FormCambio />
         </div>
+        {!temporal && <SeccionHuella />}
         <div className="mt-6 flex justify-center gap-4 text-xs text-nav-muted">
           {!temporal && <Link href="/" className="hover:text-white">Volver</Link>}
           <form action="/auth/salir" method="post"><button className="hover:text-white">Salir</button></form>
