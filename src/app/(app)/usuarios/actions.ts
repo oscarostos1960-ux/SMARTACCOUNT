@@ -72,7 +72,7 @@ export async function crearUsuario(_prev: Resultado, formData: FormData): Promis
   if (e2) return { error: `Se creó el usuario pero no se pudo asignar su permiso (${e2.message}).` };
   revalidatePath("/usuarios");
   return {
-    ok: `Usuario creado. Mándale estos datos: entra a smartaccount2026.vercel.app con ${correo} y la contraseña temporal ${contrasena}. Al entrar le pedirá cambiarla.${rol === "usuario" ? " Ahora elige a qué cuentas tendrá acceso." : ""}`,
+    ok: `Usuario creado.${rol === "usuario" ? " Ahora elige a qué cuentas tendrá acceso." : ""} Mándale estos datos (al entrar le pedirá cambiar la contraseña): Dirección: smartaccountia.com · Correo: ${correo} · Contraseña temporal: ${contrasena}`,
     contrasena,
   };
 }
@@ -93,7 +93,7 @@ export async function restablecerContrasena(usuarioId: string): Promise<Resultad
   const contrasena = contrasenaTemporal();
   const { error } = await admin.auth.admin.updateUserById(usuarioId, { password: contrasena, user_metadata: { debe_cambiar: true } });
   if (error) return { error: `No se pudo restablecer (${error.message}).` };
-  return { ok: `Nueva contraseña temporal: ${contrasena}. Al entrar le pedirá cambiarla.`, contrasena };
+  return { ok: `Listo. Al entrar le pedirá cambiarla. Nueva contraseña temporal: ${contrasena}`, contrasena };
 }
 
 // Eliminar un usuario: pierde el acceso de inmediato. Sus movimientos capturados se quedan (sin autor);
@@ -152,7 +152,7 @@ export async function crearCliente(_prev: Resultado, formData: FormData): Promis
   if (e2) return { error: `Se creó el usuario pero no se pudo asignar su espacio (${e2.message}).` };
   revalidatePath("/usuarios");
   return {
-    ok: `Cliente creado con su propio espacio en blanco. Mándale estos datos: entra a smartaccount2026.vercel.app con ${correo} y la contraseña temporal ${contrasena}. Al entrar le pedirá cambiarla; después, en "Mi espacio", agrega su clave de IA y, si quiere, su correo para los avisos.`,
+    ok: `Cliente creado con su propio espacio en blanco. Al entrar le pedirá cambiar la contraseña; después, en "Mi espacio", agrega su clave de IA y, si quiere, su correo para los avisos. Mándale estos datos: Dirección: smartaccountia.com · Correo: ${correo} · Contraseña temporal: ${contrasena}`,
     contrasena,
   };
 }
@@ -167,5 +167,5 @@ export async function restablecerCliente(espacioId: number): Promise<Resultado> 
   const contrasena = contrasenaTemporal();
   const { error } = await admin.auth.admin.updateUserById(e.titular_id, { password: contrasena, user_metadata: { debe_cambiar: true } });
   if (error) return { error: `No se pudo restablecer (${error.message}).` };
-  return { ok: `Nueva contraseña temporal del cliente: ${contrasena}. Al entrar le pedirá cambiarla.`, contrasena };
+  return { ok: `Listo. Al entrar le pedirá cambiarla. Nueva contraseña temporal del cliente: ${contrasena}`, contrasena };
 }

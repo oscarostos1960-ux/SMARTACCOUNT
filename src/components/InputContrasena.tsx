@@ -8,7 +8,7 @@ export default function InputContrasena(props: React.InputHTMLAttributes<HTMLInp
   const [visible, setVisible] = useState(false);
   return (
     <div className="relative">
-      <input {...props} type={visible ? "text" : "password"} className={`${props.className ?? "input"} pr-12`} />
+      <input autoCapitalize="none" autoCorrect="off" spellCheck={false} {...props} type={visible ? "text" : "password"} className={`${props.className ?? "input"} pr-12`} />
       <button type="button" onClick={() => setVisible((v) => !v)} data-ver-contrasena
         className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-muted hover:text-text"
         aria-label={visible ? "Ocultar contraseña" : "Mostrar contraseña"} aria-pressed={visible} title={visible ? "Ocultar" : "Mostrar"}>

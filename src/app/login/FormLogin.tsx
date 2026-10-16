@@ -13,7 +13,7 @@ export default function FormLogin() {
     <form action={accion} className="space-y-4">
       <div>
         <label htmlFor="correo" className="label">Correo electrónico</label>
-        <input id="correo" name="correo" type="email" autoComplete="email" required defaultValue={estado.correo} className="input" />
+        <input id="correo" name="correo" type="email" autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} required defaultValue={estado.correo} className="input" />
       </div>
       <div>
         <label htmlFor="password" className="label">Contraseña</label>
