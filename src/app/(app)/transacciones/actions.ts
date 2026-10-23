@@ -52,6 +52,20 @@ function refrescar() {
   revalidatePath("/");
 }
 
+// Lugar por fecha: el folio que le toca a un movimiento con esa fecha (después de los del mismo día).
+// Para uno que ya existe (excluir = su id, actual = su folio) se calcula descontándolo de la lista.
+async function folioPorFecha(supabase: Awaited<ReturnType<typeof createClient>>, cuentaId: number, fecha: string, excluir?: number, actual?: number) {
+  let q = supabase.from("transacciones").select("folio").eq("cuenta_id", cuentaId).lte("fecha", fecha).order("folio", { ascending: false }).limit(1);
+  if (excluir) q = q.neq("id", excluir);
+  const { data: previo } = await q;
+  let q2 = supabase.from("transacciones").select("id").eq("cuenta_id", cuentaId).gt("fecha", fecha).limit(1);
+  if (excluir) q2 = q2.neq("id", excluir);
+  const { data: posterior } = await q2;
+  if (!posterior?.length) return null;                     // nada después: va al final
+  const p = Number(previo?.[0]?.folio ?? 0);
+  return actual !== undefined && actual <= p ? p : p + 1;
+}
+
 export async function guardarMovimiento(
   cuentaId: number,
   id: number | null,
@@ -97,6 +111,28 @@ export async function guardarMovimiento(
     observaciones: texto(fd, "observaciones", 2000),
   };
   if (folio !== null) datos.folio = folio;
+
+  // Los folios siguen el orden de las fechas: si el folio se dejó como venía (el siguiente, o el mismo al editar),
+  // el movimiento se acomoda en su lugar por fecha. Un folio escrito a mano en medio se respeta.
+  const supa = await createClient();
+  if (!id) {
+    const { data: ult } = await supa.from("transacciones").select("folio").eq("cuenta_id", cuentaId).order("folio", { ascending: false }).limit(1);
+    const siguiente = Number(ult?.[0]?.folio ?? 0) + 1;
+    if (folio === null || folio >= siguiente) {
+      const lugar = await folioPorFecha(supa, cuentaId, fecha!);
+      if (lugar !== null) datos.folio = lugar;
+    }
+  } else {
+    const { data: antes } = await supa.from("transacciones").select("folio, fecha").eq("id", id).eq("cuenta_id", cuentaId).maybeSingle();
+    if (antes && String(antes.fecha) !== fecha && (folio === null || folio === Number(antes.folio))) {
+      const lugar = await folioPorFecha(supa, cuentaId, fecha!, id, Number(antes.folio));
+      if (lugar !== null) datos.folio = lugar;
+      else {
+        const { data: ult } = await supa.from("transacciones").select("folio").eq("cuenta_id", cuentaId).order("folio", { ascending: false }).limit(1);
+        datos.folio = Number(ult?.[0]?.folio ?? antes.folio);   // al final
+      }
+    }
+  }
   const clasificaciones = [...new Set(fd.getAll("clasificaciones").map(Number).filter((n) => Number.isInteger(n) && n > 0))];
 
   const supabase = await createClient();

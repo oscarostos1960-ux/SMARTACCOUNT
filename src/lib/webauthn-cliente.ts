@@ -95,7 +95,7 @@ export async function usarLlave(o: { reto: string; dominio: string }, idPreferid
 // Mensaje claro cuando el usuario cancela o el teléfono no deja
 export function mensajeError(e: unknown) {
   const n = e instanceof DOMException ? e.name : "";
-  if (n === "NotAllowedError" || n === "AbortError") return "Se canceló o no se reconoció. Vuelve a intentarlo o usa tu contraseña.";
+  if (n === "NotAllowedError" || n === "AbortError") return "No se pudo usar la huella / Face ID. Si tu teléfono dice que no hay un inicio de sesión disponible, entra con tu contraseña y vuelve a activarla en «Contraseña y Face ID / huella».";
   if (n === "InvalidStateError") return "Este dispositivo ya estaba activado.";
   if (n === "SecurityError") return "Face ID / huella solo funciona desde la dirección oficial de Smart Account.";
   return e instanceof Error ? e.message : "No se pudo completar.";

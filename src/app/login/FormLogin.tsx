@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import Link from "next/link";
 import { iniciarSesion, type EstadoLogin } from "./actions";
 import InputContrasena from "@/components/InputContrasena";
 import EntrarConHuella from "@/components/EntrarConHuella";
@@ -25,6 +26,7 @@ export default function FormLogin() {
       <button type="submit" disabled={enviando} className="btn-primary w-full py-2.5">
         {enviando ? "Entrando…" : "Entrar"}
       </button>
+      <p className="text-center text-sm"><Link href="/login/recuperar" className="font-medium text-primary hover:underline" data-olvide>¿Olvidaste tu contraseña?</Link></p>
     </form>
     </>
   );
