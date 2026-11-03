@@ -15,6 +15,7 @@ export type Campo = {
   opciones?: { valor: string; etiqueta: string }[];  // para tipo "opciones"
   porDefecto?: string | boolean;
   ancho?: "completo" | "medio";
+  soloTarjeta?: boolean;       // solo se pide cuando el tipo de cuenta es tarjeta de crédito
 };
 
 export type Catalogo = {
@@ -45,7 +46,8 @@ export const CATALOGOS: Catalogo[] = [
       { nombre: "banco_id", etiqueta: "Banco", tipo: "referencia", referencia: { tabla: "bancos", etiqueta: "nombre" }, enTabla: true, ancho: "medio" },
       { nombre: "tipo_cuenta_id", etiqueta: "Tipo de cuenta", tipo: "referencia", referencia: { tabla: "tipos_cuenta", etiqueta: "nombre" }, enTabla: true, ancho: "medio" },
       { nombre: "moneda_id", etiqueta: "Moneda", tipo: "referencia", referencia: { tabla: "monedas", etiqueta: "codigo" }, requerido: true, enTabla: true, ancho: "medio" },
-      { nombre: "terminacion", etiqueta: "Terminación", tipo: "terminacion", ayuda: "Últimos 4 dígitos", enTabla: true, ancho: "medio" },
+      { nombre: "terminacion", etiqueta: "Terminación", tipo: "terminacion", ayuda: "Últimos 4 dígitos (en tarjetas: la tarjeta física)", enTabla: true, ancho: "medio" },
+      { nombre: "terminacion_digital", etiqueta: "Terminación tarjeta digital", tipo: "terminacion", ayuda: "Últimos 4 dígitos de la tarjeta digital", enTabla: true, ancho: "medio", soloTarjeta: true },
       { nombre: "saldo_inicial", etiqueta: "Saldo inicial", tipo: "dinero", porDefecto: "0", enTabla: true, ancho: "medio" },
       { nombre: "descripcion", etiqueta: "Descripción", tipo: "textoLargo" },
     ],
@@ -174,4 +176,10 @@ export const CATALOGOS: Catalogo[] = [
 
 export function obtenerCatalogo(clave: string) {
   return CATALOGOS.find((c) => c.clave === clave);
+}
+
+// ¿El tipo de cuenta elegido es una tarjeta de crédito? (por su nombre: "TARJETA DE CRÉDITO")
+export function esTipoTarjeta(nombreTipo: string | null | undefined) {
+  const n = (nombreTipo ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+  return n.includes("TARJETA") && n.includes("CREDITO");
 }

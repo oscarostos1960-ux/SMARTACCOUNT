@@ -124,7 +124,7 @@ export default async function Inicio() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold">{c.nombre}</p>
                       <p className="truncate text-xs text-muted">
-                        {c.terminacion ? `•••• ${c.terminacion} · ` : ""}{c.ultimo_movimiento ? `último ${fecha(c.ultimo_movimiento)}` : "Sin movimientos"}
+                        {c.terminacion ? `•••• ${c.terminacion} · ` : ""}{c.terminacion_digital ? `digital ${c.terminacion_digital} · ` : ""}{c.ultimo_movimiento ? `último ${fecha(c.ultimo_movimiento)}` : "Sin movimientos"}
                       </p>
                     </div>
                     <p className={`num text-right text-sm font-extrabold ${Number(c.saldo) < 0 ? "text-danger" : "text-primary"}`}>

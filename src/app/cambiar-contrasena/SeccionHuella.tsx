@@ -58,11 +58,12 @@ export default function SeccionHuella() {
       ) : (
         <p className="mt-2 text-sm text-muted">Todavía no lo activas en ningún dispositivo.</p>
       )}
-      {disponible && !local && (
-        <button type="button" className="btn-primary mt-3 w-full" onClick={activar} disabled={trabajando} data-activar-huella>
-          {trabajando ? "Activando…" : "Activar en este dispositivo"}
+      {disponible && (
+        <button type="button" className={`${local ? "btn-secondary" : "btn-primary"} mt-3 w-full`} onClick={activar} disabled={trabajando} data-activar-huella>
+          {trabajando ? "Activando…" : local ? "Volver a activar en este dispositivo" : "Activar en este dispositivo"}
         </button>
       )}
+      {disponible && local && <p className="mt-2 text-xs text-muted">Úsalo si la huella / Face ID dejó de funcionar en este teléfono.</p>}
       {!disponible && <p className="mt-2 text-xs text-muted">Este dispositivo o navegador no tiene Face ID / huella disponible.</p>}
       {mensaje.ok && <p className="mt-2 text-sm text-ok">{mensaje.ok}</p>}
       {mensaje.error && <p role="alert" className="mt-2 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{mensaje.error}</p>}

@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { Pencil, Plus, Search, X, Check, Ban, Merge, Trash2 } from "lucide-react";
-import { obtenerCatalogo, type Campo } from "@/lib/catalogos";
+import { esTipoTarjeta, obtenerCatalogo, type Campo } from "@/lib/catalogos";
 import { guardarRegistro, cambiarActivo, fusionarRegistros, eliminarClasificacion, type ResultadoGuardar } from "@/app/(app)/catalogos/actions";
 
 export type Registro = Record<string, unknown> & { id: number };
@@ -263,6 +263,8 @@ function DialogoEditar({
   const [estado, formAction, guardando] = useActionState<ResultadoGuardar, FormData>(accion, {});
   const [cambiando, startTransition] = useTransition();
   const [errorActivo, setErrorActivo] = useState<string>();
+  const [tipoCuenta, setTipoCuenta] = useState(String(registro?.tipo_cuenta_id ?? ""));
+  const esTarjeta = esTipoTarjeta(referencias.tipo_cuenta_id?.find((o) => o.valor === tipoCuenta)?.etiqueta);
 
   useEffect(() => {
     dialogRef.current?.showModal();
@@ -292,7 +294,10 @@ function DialogoEditar({
       className="m-auto w-[calc(100%-2rem)] max-w-xl rounded-xl border border-border bg-surface p-0 text-text shadow-xl backdrop:bg-black/40"
       aria-labelledby="titulo-dialogo"
     >
-      <form action={formAction}>
+      <form action={formAction} onChange={(e) => {
+        const t = e.target as unknown as HTMLSelectElement;
+        if (t.name === "tipo_cuenta_id") setTipoCuenta(t.value);
+      }}>
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <h2 id="titulo-dialogo" className="text-lg font-semibold">
             {registro ? `Editar ${catalogo.singular}` : `Nuevo ${catalogo.singular}`}
@@ -303,7 +308,7 @@ function DialogoEditar({
         </div>
 
         <div className="grid max-h-[65vh] grid-cols-1 gap-4 overflow-y-auto px-5 py-4 sm:grid-cols-2">
-          {catalogo.campos.map((campo) => (
+          {catalogo.campos.filter((campo) => !campo.soloTarjeta || esTarjeta).map((campo) => (
             <CampoFormulario
               key={campo.nombre}
               campo={campo}

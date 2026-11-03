@@ -45,7 +45,10 @@ export default function Plastico({ c, i }: { c: SaldoCuenta; i: number }) {
       </div>
       <div className="flex items-center gap-4">
         <Chip />
-        <span className="num text-[15px] tracking-[0.16em]" data-terminacion>•••• •••• •••• {c.terminacion ?? "····"}</span>
+        <div className="min-w-0">
+          <span className="num block text-[15px] tracking-[0.16em]" data-terminacion>•••• •••• •••• {c.terminacion ?? "····"}</span>
+          {c.terminacion_digital && <span className="num block text-[11px] tracking-[0.08em] text-white/80" data-terminacion-digital>Digital •••• {c.terminacion_digital}</span>}
+        </div>
       </div>
       <div className="flex items-end justify-between gap-2">
         <div>
@@ -70,7 +73,12 @@ export function EncabezadoCuenta({ c, i = 0, detalle }: { c: SaldoCuenta; i?: nu
         <div className="min-w-0">
           <p className="text-[11px] uppercase tracking-[0.12em] text-white/80">{detalle}</p>
           <h1 className="truncate text-2xl font-extrabold tracking-tight sm:text-3xl">{c.nombre}</h1>
-          {c.terminacion && <p className="num mt-0.5 text-sm tracking-[0.16em] text-white/90">•••• {c.terminacion}</p>}
+          {(c.terminacion || c.terminacion_digital) && (
+            <p className="num mt-0.5 text-sm tracking-[0.16em] text-white/90">
+              {c.terminacion && <>•••• {c.terminacion}</>}
+              {c.terminacion_digital && <span className="ml-3 text-xs tracking-[0.08em] text-white/80">Digital •••• {c.terminacion_digital}</span>}
+            </p>
+          )}
         </div>
       </div>
       <div className="sm:text-right">

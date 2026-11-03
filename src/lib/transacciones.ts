@@ -13,6 +13,7 @@ export type SaldoCuenta = {
   movimientos: number;
   ultimo_movimiento: string | null;
   terminacion?: string | null;
+  terminacion_digital?: string | null;
 };
 
 export type CuentaCorta = { cuenta_id: number; nombre: string; moneda: string; activa: boolean };

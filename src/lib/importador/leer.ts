@@ -51,7 +51,7 @@ export async function leerArchivo(
   const term = [datos.terminacion, datos.terminacion_clabe].map((t) => (t ?? "").replace(/\D/g, "").slice(-4)).filter((t) => t.length === 4);
   let cuentaId: number | null = null;
   if (term.length) {
-    const { data: cs } = await supabase.from("cuentas").select("id").in("terminacion", term).eq("activa", true);
+    const { data: cs } = await supabase.from("cuentas").select("id").or(`terminacion.in.(${term.join(",")}),terminacion_digital.in.(${term.join(",")})`).eq("activa", true);
     cuentaId = (cs ?? []).map((c) => Number(c.id)).find((c) => permisos.puedeEditar(c)) ?? null;
   }
 
