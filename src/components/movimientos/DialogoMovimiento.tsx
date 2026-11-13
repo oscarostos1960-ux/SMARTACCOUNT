@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
-import { Paperclip, Sparkles, Trash2, X } from "lucide-react";
+import Link from "next/link";
+import { CalendarPlus, Paperclip, Sparkles, Trash2, X } from "lucide-react";
 import Combobox, { type OpcionCombo } from "@/components/Combobox";
 import { fecha as fmtFecha, hoyCDMX } from "@/lib/formato";
 import type { CuentaCorta, Movimiento } from "@/lib/transacciones";
@@ -62,7 +63,7 @@ export type Inicial = Plantilla & { proveedor_id: string };
 
 export function DialogoMovimiento({
   cuenta, movimiento, siguienteFolio, conceptos, proveedores, clasificaciones, puedeEditar, onCerrar,
-  cuentas, inicial, aviso, titulo: tituloFijo, vencimientoId, avisoPrevio,
+  cuentas, inicial, aviso, titulo: tituloFijo, vencimientoId, avisoPrevio, puedeProgramar = false,
 }: {
   cuenta: CuentaCorta;
   movimiento: Movimiento | null;
@@ -78,6 +79,7 @@ export function DialogoMovimiento({
   titulo?: string;
   vencimientoId?: number;
   avisoPrevio?: string;           // texto que explica qué avisos se enviarán al guardar
+  puedeProgramar?: boolean;       // muestra "Duplicar como pago programado" (solo el titular)
 }) {
   const [cuentaSel, setCuentaSel] = useState(cuenta);
   const [folio, setFolio] = useState({ valor: siguienteFolio, version: 0 });
@@ -314,7 +316,12 @@ export function DialogoMovimiento({
         )}
 
         <div className="flex flex-col-reverse gap-2 border-t border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
+          <div className="flex flex-wrap items-center gap-2">
+            {m && puedeProgramar && !confirmarBorrar && !m.transferencia_id && !m.es_ajuste && (
+              <Link href={`/pagos-programados?duplicar=${m.id}`} className="btn-ghost" title="Crea un pago programado nuevo con los datos de este movimiento">
+                <CalendarPlus className="h-4 w-4" aria-hidden /> Duplicar como pago programado
+              </Link>
+            )}
             {m && puedeEditar && (confirmarBorrar ? (
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm text-danger">¿Eliminar{m.transferencia_id ? " la transferencia completa" : ""}? Los folios siguientes se recorren.</span>

@@ -9,7 +9,7 @@ import {
 } from "@/lib/transacciones";
 
 export default function ReporteVista({
-  movimientos, total, totales, filtros, porPagina, cuentas, editables, conceptos, proveedores, clasificaciones,
+  movimientos, total, totales, filtros, porPagina, cuentas, editables, conceptos, proveedores, clasificaciones, esTitular = false,
 }: {
   movimientos: Movimiento[];
   total: number;
@@ -21,6 +21,7 @@ export default function ReporteVista({
   conceptos: Opcion[];
   proveedores: Opcion[];
   clasificaciones: Clasif[];
+  esTitular?: boolean;
 }) {
   const [abierto, setAbierto] = useState<Movimiento | null>(null);
   const [version, setVersion] = useState(0);
@@ -55,6 +56,7 @@ export default function ReporteVista({
           proveedores={proveedores}
           clasificaciones={clasificaciones}
           puedeEditar={editables.includes(abierto.cuenta_id)}
+          puedeProgramar={esTitular}
           onCerrar={() => setAbierto(null)}
         />
       )}

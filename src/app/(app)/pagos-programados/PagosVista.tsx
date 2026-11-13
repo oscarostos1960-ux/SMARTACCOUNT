@@ -8,7 +8,7 @@ import Combobox from "@/components/Combobox";
 import { DialogoMovimiento, type Inicial, type Opcion } from "@/components/movimientos/DialogoMovimiento";
 import type { Clasif } from "@/components/movimientos/TablaMovimientos";
 import { dinero, dineroClave, fecha, sinAcentos } from "@/lib/formato";
-import { describirFrecuencia, diasEntre, moverMes, nombreMes, sumarDias, type PagoProgramado, type Vencimiento } from "@/lib/pagos";
+import { copiaDePlan, describirFrecuencia, diasEntre, moverMes, nombreMes, sumarDias, type CopiaPago, type PagoProgramado, type Vencimiento } from "@/lib/pagos";
 import type { CuentaCorta } from "@/lib/transacciones";
 import { siguienteFolioCuenta } from "@/app/(app)/transacciones/actions";
 import DialogoPlan from "./DialogoPlan";
@@ -17,7 +17,7 @@ import DialogoVencimiento from "./DialogoVencimiento";
 export type Vista = "por-vencer" | "calendario" | "pagos";
 
 type Abierto =
-  | { tipo: "plan"; pago: PagoProgramado | null }
+  | { tipo: "plan"; pago: PagoProgramado | null; copia?: CopiaPago }
   | { tipo: "vencimiento"; v: Vencimiento }
   | { tipo: "pagar"; v: Vencimiento; cuenta: CuentaCorta; folio: number };
 
@@ -40,6 +40,7 @@ export type Filtro = { proveedor: string; concepto: string; soloSeleccionados: b
 
 export default function PagosVista({
   vista, mes, hoy, desde, hasta, vencimientos, pagos, cuentas, cuentasEditables, esTitular, conceptos, proveedores, clasificaciones, abrirNuevo = false,
+  copiaInicial,
 }: {
   vista: Vista;
   mes: string;
@@ -55,14 +56,18 @@ export default function PagosVista({
   proveedores: Opcion[];
   clasificaciones: Clasif[];
   abrirNuevo?: boolean;   // ?nuevo=1: abre directo el alta de un pago programado (acceso rápido del celular)
+  copiaInicial?: CopiaPago;   // ?duplicar=<movimiento>: abre el alta prellenada con los datos de un movimiento
 }) {
-  const [abierto, setAbierto] = useState<Abierto | null>(esTitular && abrirNuevo ? { tipo: "plan", pago: null } : null);
+  const [abierto, setAbierto] = useState<Abierto | null>(
+    esTitular && copiaInicial ? { tipo: "plan", pago: null, copia: copiaInicial }
+      : esTitular && abrirNuevo ? { tipo: "plan", pago: null } : null);
   useEffect(() => {
-    if (!abrirNuevo) return;
+    if (!abrirNuevo && !copiaInicial) return;
     const u = new URL(window.location.href);
     u.searchParams.delete("nuevo");
+    u.searchParams.delete("duplicar");
     window.history.replaceState(null, "", u.pathname + u.search);
-  }, [abrirNuevo]);
+  }, [abrirNuevo, copiaInicial]);
   const [version, setVersion] = useState(0);
   const [preparando, setPreparando] = useState<number | null>(null);
   const [filtro, setFiltro] = useState<Filtro>({ proveedor: "", concepto: "", soloSeleccionados: false });
@@ -139,13 +144,26 @@ export default function PagosVista({
       )}
 
       {abierto?.tipo === "plan" && (
-        <DialogoPlan key={version} pago={abierto.pago} cuentas={cuentas} conceptos={conceptos} proveedores={proveedores}
-          clasificaciones={clasificaciones} esTitular={esTitular} onCerrar={() => setAbierto(null)} />
+        <DialogoPlan key={version} pago={abierto.pago} copia={abierto.copia} cuentas={cuentas} conceptos={conceptos} proveedores={proveedores}
+          clasificaciones={clasificaciones} esTitular={esTitular} onCerrar={() => setAbierto(null)}
+          onDuplicar={esTitular && abierto.pago ? () => abrir({ tipo: "plan", pago: null, copia: copiaDePlan(abierto.pago!, hoy) }) : undefined} />
       )}
       {abierto?.tipo === "vencimiento" && (
         <DialogoVencimiento key={version} v={abierto.v} plan={planes.get(abierto.v.pago_id)} puedeCambiar={puedeCambiar(abierto.v)}
           onPagar={() => pagar(abierto.v)}
           onVerPlan={() => abrir({ tipo: "plan", pago: planes.get(abierto.v.pago_id) ?? null })}
+          onDuplicar={esTitular ? () => {
+            const plan = planes.get(abierto.v.pago_id);
+            if (!plan) return;
+            const copia = copiaDePlan(plan, hoy, abierto.v.fecha);
+            // Si esta fecha tenía otro importe, la copia toma el que se ve en pantalla
+            if (abierto.v.importe_cambiado) {
+              const importe = Number(abierto.v.importe);
+              copia.cargo = abierto.v.tipo === "cargo" ? importe : 0;
+              copia.abono = abierto.v.tipo === "abono" ? importe : 0;
+            }
+            abrir({ tipo: "plan", pago: null, copia });
+          } : undefined}
           onCerrar={() => setAbierto(null)} />
       )}
       {abierto?.tipo === "pagar" && (() => {

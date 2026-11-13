@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { obtenerPermisos } from "@/lib/auth";
 import { hoyCDMX } from "@/lib/formato";
 import { cargarCatalogosMovimiento } from "@/lib/catalogos-movimiento";
-import { moverMes, sumarDias, type PagoProgramado, type Vencimiento } from "@/lib/pagos";
+import { moverMes, proximaFechaConDia, sumarDias, type CopiaPago, type PagoProgramado, type Vencimiento } from "@/lib/pagos";
 import type { CuentaCorta } from "@/lib/transacciones";
 import PagosVista, { type Vista } from "./PagosVista";
 
@@ -73,6 +73,31 @@ export default async function PagosProgramadosPage(props: PageProps<"/pagos-prog
     pendientes: atrasados.get(Number(p.id)) ?? 0,
   })) as PagoProgramado[];
 
+  // ?duplicar=<id de movimiento>: nuevo pago programado con los datos de ese movimiento
+  let copiaInicial: CopiaPago | undefined;
+  const duplicar = typeof sp.duplicar === "string" && /^\d+$/.test(sp.duplicar) ? Number(sp.duplicar) : 0;
+  if (duplicar && permisos.esTitular) {
+    const [movR, clasMovR] = await Promise.all([
+      supabase.from("transacciones").select("cuenta_id, fecha, descripcion, cargo, abono, concepto_id, proveedor_id, referencia, leyenda1, leyenda2, leyenda3, observaciones, aviso_whatsapp, aviso_correo")
+        .eq("id", duplicar).maybeSingle(),
+      supabase.from("transaccion_clasificaciones").select("clasificacion_id").eq("transaccion_id", duplicar),
+    ]);
+    const m = movR.data;
+    if (m) {
+      const dia = Number(String(m.fecha).slice(8, 10)) || 1;
+      const inicio = proximaFechaConDia(hoy, dia);
+      copiaInicial = {
+        cuenta_id: m.cuenta_id, proveedor_id: m.proveedor_id, concepto_id: m.concepto_id,
+        descripcion: m.descripcion ?? "", cargo: Number(m.cargo), abono: Number(m.abono),
+        referencia: m.referencia, leyenda1: m.leyenda1, leyenda2: m.leyenda2, leyenda3: m.leyenda3, observaciones: m.observaciones,
+        frecuencia: "unica", dias_mes: [dia], dia_semana: null, fecha_inicio: inicio, fecha_fin: null,
+        avisar_whatsapp: !!m.aviso_whatsapp, avisar_correo: !!m.aviso_correo,
+        clasificaciones: (clasMovR.data ?? []).map((c) => Number(c.clasificacion_id)),
+        origen: `Copia del movimiento del ${String(m.fecha).slice(8, 10)}/${String(m.fecha).slice(5, 7)}/${String(m.fecha).slice(0, 4)}`,
+      };
+    }
+  }
+
   const cuentas = (cuentasR.data ?? []) as CuentaCorta[];
   const editables = cuentas.filter((c) => c.activa && permisos.puedeEditar(c.cuenta_id));
 
@@ -87,6 +112,7 @@ export default async function PagosProgramadosPage(props: PageProps<"/pagos-prog
       ) : (
         <PagosVista
           abrirNuevo={sp.nuevo === "1"}
+          copiaInicial={copiaInicial}
           vista={vista}
           mes={mes}
           hoy={hoy}

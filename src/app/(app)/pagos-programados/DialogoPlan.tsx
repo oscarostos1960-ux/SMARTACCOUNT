@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
-import { Pause, Play, Trash2 } from "lucide-react";
+import { Copy, Pause, Play, Trash2 } from "lucide-react";
 import Combobox from "@/components/Combobox";
 import ComboTexto, { type OpcionTexto } from "@/components/ComboTexto";
 import { Campo, Dialogo, type Opcion } from "@/components/movimientos/DialogoMovimiento";
@@ -9,7 +9,7 @@ import { crearConceptoRapido, crearProveedorRapido } from "@/app/(app)/catalogos
 import type { OpcionCombo } from "@/components/Combobox";
 import type { Clasif } from "@/components/movimientos/TablaMovimientos";
 import { fecha as fechaTexto, hoyCDMX } from "@/lib/formato";
-import { FRECUENCIAS, describirFrecuencia, type PagoProgramado } from "@/lib/pagos";
+import { FRECUENCIAS, describirFrecuencia, type CopiaPago, type PagoProgramado } from "@/lib/pagos";
 import type { CuentaCorta } from "@/lib/transacciones";
 import { cambiarActivo, eliminarPago, guardarPago, historialProveedor, type HistorialProveedor, type RegistroProveedor, type ResultadoPago } from "./actions";
 
@@ -41,9 +41,11 @@ const altaRapida = (fn: (t: string) => Promise<{ valor?: string; etiqueta?: stri
   };
 
 export default function DialogoPlan({
-  pago, cuentas, conceptos, proveedores, clasificaciones, esTitular, onCerrar,
+  pago, copia, cuentas, conceptos, proveedores, clasificaciones, esTitular, onDuplicar, onCerrar,
 }: {
   pago: PagoProgramado | null;
+  copia?: CopiaPago;            // pago nuevo prellenado con estos datos (Duplicar)
+  onDuplicar?: () => void;      // abre un pago nuevo con los datos de este
   cuentas: CuentaCorta[];
   conceptos: Opcion[];
   proveedores: Opcion[];
@@ -61,11 +63,13 @@ export default function DialogoPlan({
   useEffect(() => { if (estado.ok) dialogo.current?.close(); }, [estado.ok]);
 
   const p = pago;
+  // De dónde salen los valores iniciales: el pago que se edita o la copia que se está duplicando
+  const b = p ?? copia ?? null;
   const v = estado.valores;
   const val = (k: string, d: string) => (v && typeof v[k] === "string" ? (v[k] as string) : d);
-  const [frecuencia, setFrecuencia] = useState(val("frecuencia", p?.frecuencia ?? "mensual"));
-  const [inicio, setInicio] = useState(val("fecha_inicio", p?.fecha_inicio ?? hoyCDMX()));
-  const dias = [...(p?.dias_mes ?? [])].sort((a, b) => a - b);
+  const [frecuencia, setFrecuencia] = useState(val("frecuencia", b?.frecuencia ?? "mensual"));
+  const [inicio, setInicio] = useState(val("fecha_inicio", b?.fecha_inicio ?? hoyCDMX()));
+  const dias = [...(b?.dias_mes ?? [])].sort((a, b) => a - b);
   const e = estado.errores ?? {};
   const soloLectura = !esTitular;
   // Prellenado con el último pago al proveedor (solo al crear) y valores usados antes para los combos
@@ -73,10 +77,10 @@ export default function DialogoPlan({
   const [plantilla, setPlantilla] = useState<HistorialProveedor["ultimo"]>(null);
   const [version, setVersion] = useState(0);
   const [textos, setTextos] = useState<Record<CampoTexto, string>>(() => ({
-    descripcion: val("descripcion", p?.descripcion ?? ""),
-    leyenda1: val("leyenda1", p?.leyenda1 ?? ""),
-    leyenda2: val("leyenda2", p?.leyenda2 ?? ""),
-    leyenda3: val("leyenda3", p?.leyenda3 ?? ""),
+    descripcion: val("descripcion", b?.descripcion ?? ""),
+    leyenda1: val("leyenda1", b?.leyenda1 ?? ""),
+    leyenda2: val("leyenda2", b?.leyenda2 ?? ""),
+    leyenda3: val("leyenda3", b?.leyenda3 ?? ""),
   }));
   const ponerTexto = (k: CampoTexto) => (t: string) => setTextos((x) => ({ ...x, [k]: t }));
   const opciones = Object.fromEntries(CAMPOS_TEXTO.map((k) => [k, opcionesDe(historial.registros, k)])) as Record<CampoTexto, OpcionTexto[]>;
@@ -91,7 +95,7 @@ export default function DialogoPlan({
       setVersion((x) => x + 1);
     }
   }
-  const proveedorInicial = val("proveedor_id", p?.proveedor_id ? String(p.proveedor_id) : "");
+  const proveedorInicial = val("proveedor_id", b?.proveedor_id ? String(b.proveedor_id) : "");
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (proveedorInicial) historialProveedor(Number(proveedorInicial)).then(setHistorial).catch(() => {}); }, []);
 
@@ -104,9 +108,9 @@ export default function DialogoPlan({
   }
 
   const t = plantilla;
-  const clasifElegidas = new Set((v?.clasificaciones as string[] | undefined) ?? t?.clasificaciones ?? (p?.clasificaciones ?? []).map(String));
-  const importe = p ? Math.max(p.cargo, p.abono) : 0;
-  const tipoInicial = val("tipo", t?.tipo ?? (p && p.abono > p.cargo ? "abono" : "cargo"));
+  const clasifElegidas = new Set((v?.clasificaciones as string[] | undefined) ?? t?.clasificaciones ?? (b?.clasificaciones ?? []).map(String));
+  const importe = b ? Math.max(b.cargo, b.abono) : 0;
+  const tipoInicial = val("tipo", t?.tipo ?? (b && b.abono > b.cargo ? "abono" : "cargo"));
   const porMes = !["unica", "semanal"].includes(frecuencia);
 
   function alternarActivo() {
@@ -125,7 +129,7 @@ export default function DialogoPlan({
   }
 
   return (
-    <Dialogo titulo={soloLectura ? "Pago programado" : p ? "Editar pago programado" : "Nuevo pago programado"} refDialogo={dialogo} onCerrar={onCerrar}>
+    <Dialogo titulo={soloLectura ? "Pago programado" : p ? "Editar pago programado" : copia ? "Nuevo pago programado (copia)" : "Nuevo pago programado"} refDialogo={dialogo} onCerrar={onCerrar}>
       <form action={formAction}>
         <fieldset disabled={soloLectura} className="grid max-h-[68vh] grid-cols-1 gap-4 max-sm:max-h-[calc(100dvh-8rem)] overflow-y-auto px-5 py-4 sm:grid-cols-6">
           {p && !p.activo && (
@@ -137,8 +141,13 @@ export default function DialogoPlan({
             </p>
           )}
 
+          {copia && !p && (
+            <p className="rounded-lg bg-primary-soft px-3 py-2 text-sm text-primary sm:col-span-6" data-copia>
+              {copia.origen}. Cambia lo que necesites (fecha, importe, proveedor…) y guarda: se crea un pago programado nuevo y el original no cambia.
+            </p>
+          )}
           <Campo id="p-proveedor" etiqueta="A favor de (proveedor)" error={e.proveedor_id} className="sm:col-span-6">
-            <Combobox id="p-proveedor" nombre="proveedor_id" opciones={proveedores.filter((x) => x.activo || x.valor === String(p?.proveedor_id))}
+            <Combobox id="p-proveedor" nombre="proveedor_id" opciones={proveedores.filter((x) => x.activo || x.valor === String(b?.proveedor_id))}
               valorInicial={proveedorInicial} placeholder="Buscar proveedor…" onCambio={(x) => void cargarHistorial(x, !p)} onCrear={altaRapida(crearProveedorRapido)} />
           </Campo>
           {t && !p && (
@@ -147,13 +156,13 @@ export default function DialogoPlan({
             </p>
           )}
           <Campo id="p-concepto" etiqueta="Concepto" className="sm:col-span-3">
-            <Combobox key={`c${version}`} id="p-concepto" nombre="concepto_id" opciones={conceptos.filter((c) => c.activo || c.valor === String(p?.concepto_id))}
-              valorInicial={val("concepto_id", t?.concepto_id || (p?.concepto_id ? String(p.concepto_id) : ""))} placeholder="Buscar concepto…" onCrear={altaRapida(crearConceptoRapido)} />
+            <Combobox key={`c${version}`} id="p-concepto" nombre="concepto_id" opciones={conceptos.filter((c) => c.activo || c.valor === String(b?.concepto_id))}
+              valorInicial={val("concepto_id", t?.concepto_id || (b?.concepto_id ? String(b.concepto_id) : ""))} placeholder="Buscar concepto…" onCrear={altaRapida(crearConceptoRapido)} />
           </Campo>
           <Campo id="p-cuenta" etiqueta="Cuenta para pagar" className="sm:col-span-3" ayuda="Se propone al registrar el pago; la puedes cambiar.">
-            <select key={`a${version}`} id="p-cuenta" name="cuenta_id" defaultValue={val("cuenta_id", t?.cuenta_id && cuentas.some((c) => c.activa && String(c.cuenta_id) === t.cuenta_id) ? t.cuenta_id : p?.cuenta_id ? String(p.cuenta_id) : "")} className="input">
+            <select key={`a${version}`} id="p-cuenta" name="cuenta_id" defaultValue={val("cuenta_id", t?.cuenta_id && cuentas.some((c) => c.activa && String(c.cuenta_id) === t.cuenta_id) ? t.cuenta_id : b?.cuenta_id ? String(b.cuenta_id) : "")} className="input">
               <option value="">Sin cuenta fija</option>
-              {cuentas.filter((c) => c.activa || c.cuenta_id === p?.cuenta_id).map((c) => <option key={c.cuenta_id} value={c.cuenta_id}>{c.nombre} ({c.moneda})</option>)}
+              {cuentas.filter((c) => c.activa || c.cuenta_id === b?.cuenta_id).map((c) => <option key={c.cuenta_id} value={c.cuenta_id}>{c.nombre} ({c.moneda})</option>)}
             </select>
           </Campo>
 
@@ -171,7 +180,7 @@ export default function DialogoPlan({
             </div>
           </fieldset>
           <Campo id="p-monto" etiqueta="Importe" error={e.monto} className="sm:col-span-3" ayuda="Déjalo en 0 si cambia cada vez.">
-            <input key={`m${version}`} id="p-monto" name="monto" type="text" inputMode="decimal" defaultValue={val("monto", p ? String(importe) : t?.monto ?? "")} className="input num text-right" placeholder="0.00" />
+            <input key={`m${version}`} id="p-monto" name="monto" type="text" inputMode="decimal" defaultValue={val("monto", b ? String(importe) || "" : t?.monto ?? "")} className="input num text-right" placeholder="0.00" />
           </Campo>
 
           <Campo id="p-frecuencia" etiqueta="Se paga" requerido error={e.frecuencia} className="sm:col-span-2">
@@ -184,7 +193,7 @@ export default function DialogoPlan({
           </Campo>
           {frecuencia !== "unica" ? (
             <Campo id="p-fin" etiqueta="Última fecha" error={e.fecha_fin} className="sm:col-span-2" ayuda="Vacío = sin fin.">
-              <input id="p-fin" name="fecha_fin" type="date" defaultValue={val("fecha_fin", p?.fecha_fin ?? "")} className="input" />
+              <input id="p-fin" name="fecha_fin" type="date" defaultValue={val("fecha_fin", b?.fecha_fin ?? "")} className="input" />
             </Campo>
           ) : <div className="hidden sm:col-span-2 sm:block" />}
           {porMes && (
@@ -192,7 +201,7 @@ export default function DialogoPlan({
               <Campo id="p-dia1" etiqueta={frecuencia === "quincenal" ? "Primer día del mes" : "Día del mes"} error={e.dia1} className="sm:col-span-3"
                 ayuda="Si el mes es más corto, se usa su último día.">
                 <input key={`d1-${inicio}`} id="p-dia1" name="dia1" type="number" min={1} max={31}
-                  defaultValue={val("dia1", String(dias[0] && p?.fecha_inicio === inicio ? dias[0] : Number(inicio.slice(8, 10)) || 1))} className="input num" />
+                  defaultValue={val("dia1", String(dias[0] && b?.fecha_inicio === inicio ? dias[0] : Number(inicio.slice(8, 10)) || 1))} className="input num" />
               </Campo>
               {frecuencia === "quincenal" && (
                 <Campo id="p-dia2" etiqueta="Segundo día del mes" error={e.dia2} className="sm:col-span-3">
@@ -206,7 +215,7 @@ export default function DialogoPlan({
             <ComboTexto id="p-desc" nombre="descripcion" valor={textos.descripcion} onCambio={ponerTexto("descripcion")} onElegir={(x) => alElegir("descripcion", x)} opciones={opciones.descripcion} maxLength={250} />
           </Campo>
           <Campo id="p-ref" etiqueta="Cheque / referencia" className="sm:col-span-2 max-sm:hidden">
-            <input id="p-ref" name="referencia" type="text" defaultValue={val("referencia", p?.referencia ?? "")} className="input" maxLength={100} />
+            <input id="p-ref" name="referencia" type="text" defaultValue={val("referencia", b?.referencia ?? "")} className="input" maxLength={100} />
           </Campo>
           <Campo id="p-l1" etiqueta="Leyenda 1" className="sm:col-span-6 max-sm:hidden">
             <ComboTexto id="p-l1" nombre="leyenda1" valor={textos.leyenda1} onCambio={ponerTexto("leyenda1")} onElegir={(x) => alElegir("leyenda1", x)} opciones={opciones.leyenda1} maxLength={255} />
@@ -233,13 +242,13 @@ export default function DialogoPlan({
             </fieldset>
           )}
           <Campo id="p-obs" etiqueta="Observaciones" className="sm:col-span-6">
-            <textarea id="p-obs" name="observaciones" rows={2} defaultValue={val("observaciones", p?.observaciones ?? "")} className="input" />
+            <textarea id="p-obs" name="observaciones" rows={2} defaultValue={val("observaciones", b?.observaciones ?? "")} className="input" />
           </Campo>
           <fieldset className="sm:col-span-6">
             <legend className="label">Avisar al proveedor cuando se pague</legend>
             <div className="flex flex-wrap gap-4 text-sm">
-              <label className="flex items-center gap-2"><input type="checkbox" name="avisar_whatsapp" defaultChecked={p?.avisar_whatsapp} className="h-5 w-5" /> WhatsApp</label>
-              <label className="flex items-center gap-2"><input type="checkbox" name="avisar_correo" defaultChecked={p?.avisar_correo} className="h-5 w-5" /> Correo</label>
+              <label className="flex items-center gap-2"><input type="checkbox" name="avisar_whatsapp" defaultChecked={b?.avisar_whatsapp} className="h-5 w-5" /> WhatsApp</label>
+              <label className="flex items-center gap-2"><input type="checkbox" name="avisar_correo" defaultChecked={b?.avisar_correo} className="h-5 w-5" /> Correo</label>
             </div>
             <p className="mt-1 text-xs text-muted">Se envían solos al registrar el pago: la imagen con los datos del pago y los documentos adjuntos.</p>
           </fieldset>
@@ -261,6 +270,11 @@ export default function DialogoPlan({
                 <button type="button" className="btn-ghost" onClick={alternarActivo} disabled={trabajando}>
                   {p.activo ? <><Pause className="h-4 w-4" aria-hidden /> Pausar</> : <><Play className="h-4 w-4" aria-hidden /> Reanudar</>}
                 </button>
+                {onDuplicar && (
+                  <button type="button" className="btn-ghost" onClick={onDuplicar} disabled={trabajando}>
+                    <Copy className="h-4 w-4" aria-hidden /> Duplicar
+                  </button>
+                )}
               </>
             ))}
           </div>

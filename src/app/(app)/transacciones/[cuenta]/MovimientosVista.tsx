@@ -11,7 +11,7 @@ import {
 
 export default function MovimientosVista({
   cuenta, movimientos, total, totales, filtros, porPagina, siguienteFolio,
-  conceptos, proveedores, clasificaciones, cuentas, puedeEditar, abrirNuevo = false,
+  conceptos, proveedores, clasificaciones, cuentas, puedeEditar, abrirNuevo = false, esTitular = false,
 }: {
   cuenta: CuentaCorta;
   movimientos: Movimiento[];
@@ -25,6 +25,7 @@ export default function MovimientosVista({
   clasificaciones: Clasif[];
   cuentas: CuentaCorta[];
   puedeEditar: boolean;
+  esTitular?: boolean;    // puede crear pagos programados (Duplicar como pago programado)
   abrirNuevo?: boolean;   // ?nuevo=1: abre directo la captura (acceso rápido del celular)
 }) {
   const [abierto, setAbierto] = useState<Movimiento | "nuevo" | "transferencia" | null>(puedeEditar && abrirNuevo ? "nuevo" : null);
@@ -89,6 +90,7 @@ export default function MovimientosVista({
           proveedores={proveedores}
           clasificaciones={clasificaciones}
           puedeEditar={puedeEditar}
+          puedeProgramar={esTitular}
           onCerrar={() => setAbierto(null)}
         />
       )}

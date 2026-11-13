@@ -42,6 +42,7 @@ export default async function ReportePage(props: PageProps<"/reporte">) {
           porPagina={POR_PAGINA}
           cuentas={listaCuentas}
           editables={permisos.esTitular ? listaCuentas.map((c) => c.cuenta_id) : permisos.editables}
+          esTitular={permisos.esTitular}
           {...catalogos}
         />
       )}

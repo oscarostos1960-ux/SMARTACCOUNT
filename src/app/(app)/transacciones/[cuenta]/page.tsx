@@ -74,6 +74,7 @@ export default async function CuentaPage(props: PageProps<"/transacciones/[cuent
           {...catalogos}
           cuentas={otras}
           puedeEditar={puedeEditar}
+          esTitular={permisos.esTitular}
         />
       )}
     </div>

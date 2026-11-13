@@ -2,20 +2,21 @@
 
 import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { CheckCircle2, CircleSlash, ExternalLink, RotateCcw, Wallet } from "lucide-react";
+import { CheckCircle2, CircleSlash, Copy, ExternalLink, RotateCcw, Wallet } from "lucide-react";
 import { Campo, Dialogo } from "@/components/movimientos/DialogoMovimiento";
 import { dineroClave, fecha } from "@/lib/formato";
 import { describirFrecuencia, type PagoProgramado, type Vencimiento } from "@/lib/pagos";
 import { actualizarVencimiento } from "./actions";
 
 export default function DialogoVencimiento({
-  v, plan, puedeCambiar, onPagar, onVerPlan, onCerrar,
+  v, plan, puedeCambiar, onPagar, onVerPlan, onDuplicar, onCerrar,
 }: {
   v: Vencimiento;
   plan: PagoProgramado | undefined;
   puedeCambiar: boolean;
   onPagar: () => void;
   onVerPlan: () => void;
+  onDuplicar?: () => void;      // nuevo pago programado con los mismos datos
   onCerrar: () => void;
 }) {
   const dialogo = useRef<HTMLDialogElement>(null);
@@ -97,6 +98,9 @@ export default function DialogoVencimiento({
       <div className="flex flex-col-reverse gap-2 border-t border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap gap-2">
           {plan && <button type="button" className="btn-ghost" onClick={onVerPlan}>Ver pago programado</button>}
+          {plan && onDuplicar && (
+            <button type="button" className="btn-ghost" onClick={onDuplicar}><Copy className="h-4 w-4" aria-hidden /> Duplicar</button>
+          )}
           {puedeCambiar && v.estado === "pendiente" && (
             <button type="button" className="btn-ghost" onClick={() => hacer({ estado: "omitido" })} disabled={trabajando}>
               <CircleSlash className="h-4 w-4" aria-hidden /> Omitir esta fecha

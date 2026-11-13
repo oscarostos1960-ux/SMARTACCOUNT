@@ -42,6 +42,34 @@ export type PagoProgramado = {
   pendientes: number;           // fechas pendientes vencidas (atrasadas)
 };
 
+// Datos para prellenar un pago programado nuevo (al duplicar un pago o un movimiento)
+export type CopiaPago = Omit<PagoProgramado, "id" | "activo" | "proximo" | "pendientes"> & { origen: string };
+
+// Primera fecha desde mañana que cae en el día del mes indicado (o el último día si el mes es corto)
+export function proximaFechaConDia(hoy: string, dia: number) {
+  for (let n = 0; n < 3; n++) {
+    const [a, m] = moverMes(hoy.slice(0, 7), n).split("-").map(Number);
+    const ultimo = new Date(Date.UTC(a, m, 0)).getUTCDate();
+    const f = `${a}-${String(m).padStart(2, "0")}-${String(Math.min(dia, ultimo)).padStart(2, "0")}`;
+    if (f > hoy) return f;
+  }
+  return sumarDias(hoy, 1);
+}
+
+// Copia de un pago programado: mismos datos; empieza en la fecha indicada (o en la próxima pendiente), nunca antes de hoy
+export function copiaDePlan(p: PagoProgramado, hoy: string, desde?: string): CopiaPago {
+  const { id, activo, proximo, pendientes, ...datos } = p;
+  void id; void activo; void pendientes;
+  let inicio = desde ?? proximo ?? p.fecha_inicio;
+  if (inicio < hoy) inicio = hoy;
+  return {
+    ...datos,
+    fecha_inicio: inicio,
+    fecha_fin: p.fecha_fin && p.fecha_fin >= inicio ? p.fecha_fin : null,
+    origen: "Copia de un pago programado",
+  };
+}
+
 export type Vencimiento = {
   id: number;
   pago_id: number;
