@@ -57,6 +57,7 @@ export default function ReporteVista({
           clasificaciones={clasificaciones}
           puedeEditar={editables.includes(abierto.cuenta_id)}
           puedeProgramar={esTitular}
+          cuentasMover={cuentas.filter((c) => editables.includes(c.cuenta_id))}
           onCerrar={() => setAbierto(null)}
         />
       )}

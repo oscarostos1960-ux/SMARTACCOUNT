@@ -63,7 +63,7 @@ export type Inicial = Plantilla & { proveedor_id: string };
 
 export function DialogoMovimiento({
   cuenta, movimiento, siguienteFolio, conceptos, proveedores, clasificaciones, puedeEditar, onCerrar,
-  cuentas, inicial, aviso, titulo: tituloFijo, vencimientoId, avisoPrevio, puedeProgramar = false,
+  cuentas, inicial, aviso, titulo: tituloFijo, vencimientoId, avisoPrevio, puedeProgramar = false, cuentasMover,
 }: {
   cuenta: CuentaCorta;
   movimiento: Movimiento | null;
@@ -80,6 +80,7 @@ export function DialogoMovimiento({
   vencimientoId?: number;
   avisoPrevio?: string;           // texto que explica qué avisos se enviarán al guardar
   puedeProgramar?: boolean;       // muestra "Duplicar como pago programado" (solo el titular)
+  cuentasMover?: CuentaCorta[];   // al editar: cuentas a las que se puede pasar el movimiento si se capturó en la equivocada
 }) {
   const [cuentaSel, setCuentaSel] = useState(cuenta);
   const [folio, setFolio] = useState({ valor: siguienteFolio, version: 0 });
@@ -199,6 +200,17 @@ export function DialogoMovimiento({
             </p>
           )}
           {vencimientoId && <input type="hidden" name="vencimiento_id" value={vencimientoId} />}
+          {m && puedeEditar && !m.transferencia_id && !m.es_ajuste && (() => {
+            const destinos = (cuentasMover ?? []).filter((c) => c.activa && c.cuenta_id !== cuenta.cuenta_id && c.moneda === cuenta.moneda);
+            return destinos.length ? (
+              <Campo id="m-mover" etiqueta="Cuenta" className="sm:col-span-6" ayuda="¿Lo registraste en la cuenta equivocada? Elige la correcta; el folio se acomoda solo por fecha.">
+                <select id="m-mover" name="mover_a" defaultValue={String(cuenta.cuenta_id)} className="input" data-mover-cuenta>
+                  <option value={cuenta.cuenta_id}>{cuenta.nombre} ({cuenta.moneda})</option>
+                  {destinos.map((c) => <option key={c.cuenta_id} value={c.cuenta_id}>{c.nombre} ({c.moneda})</option>)}
+                </select>
+              </Campo>
+            ) : null;
+          })()}
           {cuentas && !m && (
             <Campo id="m-cuenta" etiqueta="Cuenta" requerido className="sm:col-span-6" ayuda="Cuenta de la que sale (o a la que entra) el dinero.">
               <select id="m-cuenta" value={cuentaSel.cuenta_id} onChange={(ev) => cambiarCuenta(ev.target.value)} className="input">

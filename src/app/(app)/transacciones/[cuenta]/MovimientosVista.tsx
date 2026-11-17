@@ -91,6 +91,7 @@ export default function MovimientosVista({
           clasificaciones={clasificaciones}
           puedeEditar={puedeEditar}
           puedeProgramar={esTitular}
+          cuentasMover={cuentas}
           onCerrar={() => setAbierto(null)}
         />
       )}

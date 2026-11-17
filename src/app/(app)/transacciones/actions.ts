@@ -115,7 +115,28 @@ export async function guardarMovimiento(
   // Los folios siguen el orden de las fechas: si el folio se dejó como venía (el siguiente, o el mismo al editar),
   // el movimiento se acomoda en su lugar por fecha. Un folio escrito a mano en medio se respeta.
   const supa = await createClient();
-  if (!id) {
+  // Al editar: pasar el movimiento a otra cuenta (se capturó en la equivocada)
+  const moverA = id ? idOpcional(fd, "mover_a") : null;
+  const mover = !!(moverA && moverA !== cuentaId);
+  if (mover) {
+    if (!permisos.puedeEditar(moverA!)) return { valores, error: "No tienes permiso para registrar movimientos en esa cuenta." };
+    const [{ data: mov }, { data: cs }] = await Promise.all([
+      supa.from("transacciones").select("transferencia_id, es_ajuste").eq("id", id!).eq("cuenta_id", cuentaId).maybeSingle(),
+      supa.from("cuentas").select("id, moneda_id, activa").in("id", [cuentaId, moverA!]),
+    ]);
+    if (!mov) return { valores, error: "No se encontró el movimiento o no tienes permiso para cambiarlo." };
+    if (mov.transferencia_id || mov.es_ajuste) return { valores, error: "Las transferencias y ajustes no se pueden pasar a otra cuenta." };
+    const origen = cs?.find((c) => Number(c.id) === cuentaId), destino = cs?.find((c) => Number(c.id) === moverA);
+    if (!destino?.activa) return { valores, error: "La cuenta elegida no está activa." };
+    if (origen?.moneda_id !== destino.moneda_id) return { valores, error: "Solo se puede pasar a una cuenta de la misma moneda." };
+    datos.cuenta_id = moverA;
+    const lugar = await folioPorFecha(supa, moverA!, fecha!);
+    if (lugar !== null) datos.folio = lugar;
+    else {
+      const { data: ult } = await supa.from("transacciones").select("folio").eq("cuenta_id", moverA!).order("folio", { ascending: false }).limit(1);
+      datos.folio = Number(ult?.[0]?.folio ?? 0) + 1;   // al final
+    }
+  } else if (!id) {
     const { data: ult } = await supa.from("transacciones").select("folio").eq("cuenta_id", cuentaId).order("folio", { ascending: false }).limit(1);
     const siguiente = Number(ult?.[0]?.folio ?? 0) + 1;
     if (folio === null || folio >= siguiente) {
